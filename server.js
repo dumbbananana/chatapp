@@ -115,7 +115,7 @@ app.get('/auth/status', (req, res) => {
 
 /* ---------- GMAIL ---------- */
 app.get('/api/gmail/messages', async (req, res) => {
-  const { userId, q = 'is:unread', maxResults = 20 } = req.query;
+ const { userId, q = 'from:student.services@ing.edu.np OR from:rte@ing.edu.np', maxResults = 50 } = req.query;
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
   const auth = getAuthenticatedClient(userId);

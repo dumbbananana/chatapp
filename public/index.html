@@ -621,7 +621,7 @@ async function fetchLiveData() {
   if (!currentUserId) return;
   syncStatus = 'syncing'; updateSyncIndicator();
   try {
-    const gmailRes = await fetch(`/api/gmail/messages?userId=${encodeURIComponent(currentUserId)}&maxResults=20`);
+   const gmailRes = await fetch(`/api/gmail/messages?userId=${encodeURIComponent(currentUserId)}&maxResults=50`);
     if (gmailRes.status === 401) {
       currentUserId = null; localStorage.removeItem('studentOS_userId');
       liveEmails = null; liveEvents = null; syncStatus = 'idle';
@@ -1889,12 +1889,10 @@ function renderOverview() {
    EMAILS
    ============================================================ */
 function renderEmailFilter() {
-  return `<div class="email-filters">${['all','unread','important'].map(f => `<button class="email-filter ${state.emailFilter === f ? 'active' : ''}" onclick="setEmailFilter('${f}')">${f[0].toUpperCase() + f.slice(1)}</button>`).join('')}</div>`;
+  return ''; // no filter chips — always shows only the two uni addresses
 }
 function renderEmails() {
-  let list = getEmails();
-  if (state.emailFilter === 'unread') list = list.filter(e => e.unread);
-  if (state.emailFilter === 'important') list = list.filter(e => e.important);
+  const list = getEmails();
   if (!currentUserId) {
     return `<div style="padding: 24px 12px; text-align: center;">
       <div style="font-size: 28px; opacity: 0.5; margin-bottom: 10px;">📬</div>
@@ -1903,7 +1901,7 @@ function renderEmails() {
       <button class="btn amber small" onclick="connectGoogle()">Connect Google</button>
     </div>`;
   }
-  if (!list.length) return '<div class="empty">No emails in this filter.</div>';
+  if (!list.length) return '<div class="empty">No emails from student.services@ing.edu.np or rte@ing.edu.np</div>';
   return list.map(e => {
     const expanded = state.expandedEmail === e.id;
     return `
