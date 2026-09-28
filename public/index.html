@@ -1,0 +1,2603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #17140f; --bg-2: #1e1a14; --surface: #221d16; --surface-2: #2a251d;
+    --surface-3: #322c22; --border: #363026; --border-hi: #4a4234;
+    --text: #eee6d6; --text-dim: #b8ab98; --muted: #7a7060;
+    --amber: #e09a4e; --amber-soft: rgba(224, 154, 78, 0.14);
+    --sage: #86ab7a; --sage-soft: rgba(134, 171, 122, 0.14);
+    --coral: #d4745e; --coral-soft: rgba(212, 116, 94, 0.14);
+    --plum: #b08aba; --plum-soft: rgba(176, 138, 186, 0.14);
+    --sky: #7ca5c4; --sky-soft: rgba(124, 165, 196, 0.14);
+    --rose: #d68a9e; --rose-soft: rgba(214, 138, 158, 0.14);
+    --r: 14px; --r-lg: 20px; --r-pill: 999px;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px; line-height: 1.5; color: var(--text);
+    background: var(--bg); min-height: 100vh;
+    padding: 22px 24px 80px; -webkit-font-smoothing: antialiased;
+    background-image:
+      radial-gradient(900px 500px at 15% -5%, rgba(224, 154, 78, 0.06), transparent 60%),
+      radial-gradient(800px 500px at 90% 0%, rgba(134, 171, 122, 0.045), transparent 60%),
+      radial-gradient(700px 500px at 50% 100%, rgba(176, 138, 186, 0.04), transparent 60%);
+    background-attachment: fixed; overflow-x: hidden;
+  }
+  body[data-mode="basic"] { font-size: 13px; }
+  .container { max-width: 1400px; margin: 0 auto; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .topbar-left { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .topbar-right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .mode-switch { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-pill); }
+  .mode-switch button { padding: 6px 14px; border: none; background: transparent; color: var(--text-dim); font-family: inherit; font-size: 11.5px; font-weight: 600; border-radius: var(--r-pill); cursor: pointer; transition: all 0.2s; }
+  .mode-switch button:hover { color: var(--text); }
+  .mode-switch button.active { background: var(--text); color: var(--bg); }
+  .sync-indicator { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--border); font-size: 11px; font-weight: 600; color: var(--text-dim); transition: all 0.2s; }
+  .sync-indicator.syncing { color: var(--amber); border-color: rgba(224, 154, 78, 0.3); }
+  .sync-indicator.live { color: var(--sage); border-color: rgba(134, 171, 122, 0.3); }
+  .sync-indicator .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .sync-indicator.syncing .dot { animation: spin 1s linear infinite; }
+  .sync-indicator.live .dot { animation: pulse-dot 2s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.85); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .nav-wrap { display: flex; justify-content: center; margin-bottom: 26px; }
+  .nav { display: inline-flex; gap: 2px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-pill); box-shadow: 0 4px 20px -8px rgba(0, 0, 0, 0.5); }
+  .nav button { padding: 9px 22px; border: none; background: transparent; color: var(--text-dim); font-family: inherit; font-size: 13px; font-weight: 500; border-radius: var(--r-pill); cursor: pointer; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+  .nav button:hover { color: var(--text); }
+  .nav button.active { color: var(--bg); font-weight: 600; }
+  .nav button[data-view="overview"].active { background: var(--text); }
+  .nav button[data-view="uni"].active { background: var(--sage); color: #141d10; }
+  .nav button[data-view="job"].active { background: var(--amber); color: #2a1c08; }
+  .nav button[data-view="finances"].active { background: var(--plum); color: #21172a; }
+
+  .view { display: none; }
+  .view.active { display: block; }
+  .view.active .stagger > * { opacity: 0; transform: translateY(12px); animation: cardIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+  .view.active .stagger > *:nth-child(1) { animation-delay: 0.02s; }
+  .view.active .stagger > *:nth-child(2) { animation-delay: 0.06s; }
+  .view.active .stagger > *:nth-child(3) { animation-delay: 0.10s; }
+  .view.active .stagger > *:nth-child(4) { animation-delay: 0.14s; }
+  .view.active .stagger > *:nth-child(5) { animation-delay: 0.18s; }
+  .view.active .stagger > *:nth-child(6) { animation-delay: 0.22s; }
+  @keyframes cardIn { to { opacity: 1; transform: translateY(0); } }
+
+  .grid { display: grid; gap: 16px; }
+  .g-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .g-2 { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+  .g-1-2 { grid-template-columns: minmax(0, 1.3fr) minmax(320px, 1fr); }
+  @media (max-width: 900px) { .g-1-2 { grid-template-columns: 1fr; } }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 20px 22px; transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s; position: relative; overflow: hidden; }
+  .card:hover { border-color: var(--border-hi); transform: translateY(-2px); box-shadow: 0 12px 32px -20px rgba(0, 0, 0, 0.7); }
+  .card h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 14px; }
+  .card h2.uni { color: var(--sage); }
+  .card h2.job { color: var(--amber); }
+  .card h2.fin { color: var(--plum); }
+
+  .stat-card .stat { font-size: 32px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05; color: var(--text); font-variant-numeric: tabular-nums; }
+  .stat-card .stat small { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 3px; }
+  .stat-card .stat.amber { color: var(--amber); }
+  .stat-card .stat.sage { color: var(--sage); }
+  .stat-card .stat.coral { color: var(--coral); }
+  .stat-card .stat.plum { color: var(--plum); }
+  .stat-card .stat.sky { color: var(--sky); }
+  .stat-card .stat-label { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .stat-card .spark { height: 3px; border-radius: 2px; background: var(--surface-3); margin-top: 14px; overflow: hidden; }
+  .stat-card .spark .fill { height: 100%; border-radius: 2px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); }
+  .spark .fill.amber { background: var(--amber); }
+  .spark .fill.sage { background: var(--sage); }
+  .spark .fill.coral { background: var(--coral); }
+  .spark .fill.plum { background: var(--plum); }
+  .spark .fill.sky { background: var(--sky); }
+  .growth { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: var(--r-pill); margin-top: 8px; }
+  .growth.up { background: var(--sage-soft); color: var(--sage); }
+  .growth.down { background: var(--coral-soft); color: var(--coral); }
+  .growth.flat { background: var(--surface-3); color: var(--text-dim); }
+  .edit-pencil { width: 26px; height: 26px; border-radius: 50%; background: var(--bg-2); border: 1px solid var(--border); color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; padding: 0; transition: all 0.2s; flex-shrink: 0; }
+  .edit-pencil:hover { background: var(--surface-3); color: var(--text); border-color: var(--border-hi); transform: rotate(-8deg); }
+  .live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--sage); margin-right: 5px; position: relative; vertical-align: middle; }
+  .live-dot::after { content: ''; position: absolute; inset: -2px; border-radius: 50%; background: var(--sage); animation: livePulse 2s ease-out infinite; }
+  @keyframes livePulse { 0% { transform: scale(1); opacity: 0.7; } 100% { transform: scale(2.2); opacity: 0; } }
+
+  .pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: var(--r-pill); font-size: 10px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap; }
+  .pill.high { background: var(--coral-soft); color: var(--coral); }
+  .pill.med  { background: var(--amber-soft); color: var(--amber); }
+  .pill.low  { background: var(--surface-3); color: var(--text-dim); }
+  .pill.sage { background: var(--sage-soft); color: var(--sage); }
+  .pill.coral { background: var(--coral-soft); color: var(--coral); }
+  .pill.plum { background: var(--plum-soft); color: var(--plum); }
+  .pill.sky  { background: var(--sky-soft); color: var(--sky); }
+  .pill.amber { background: var(--amber-soft); color: var(--amber); }
+  .pill.rose { background: var(--rose-soft); color: var(--rose); }
+
+  .btn { padding: 8px 16px; border: none; border-radius: var(--r-pill); background: var(--text); color: var(--bg); font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+  .btn:hover { transform: translateY(-1px); opacity: 0.92; }
+  .btn.amber { background: var(--amber); color: #2a1c08; }
+  .btn.sage { background: var(--sage); color: #141d10; }
+  .btn.plum { background: var(--plum); color: #21172a; }
+  .btn.coral { background: var(--coral); color: #1a0806; }
+  .btn.sky { background: var(--sky); color: #0a1a24; }
+  .btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
+  .btn.ghost:hover { background: var(--surface-2); border-color: var(--border-hi); color: var(--text); }
+  .btn.icon { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; border-radius: 50%; }
+  .btn.small { padding: 6px 12px; font-size: 11.5px; }
+
+  .input, .select { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 13px; color: var(--text); font-family: inherit; font-size: 13px; outline: none; transition: border-color 0.15s, background 0.15s; width: 100%; }
+  .input::placeholder { color: var(--muted); }
+  .input:focus, .select:focus { border-color: var(--amber); background: var(--surface-3); }
+  .select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%237a7060' stroke-width='2.5'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 11px center; padding-right: 30px; }
+
+  .section-title { display: flex; align-items: center; gap: 12px; margin: 30px 0 14px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+  .section-title:first-child { margin-top: 0; }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--border), transparent); }
+
+  .insight { padding: 12px 15px; border-radius: 10px; background: var(--bg-2); border-left: 2px solid var(--sky); margin-bottom: 8px; font-size: 12.5px; line-height: 1.55; color: var(--text-dim); transition: transform 0.2s; display: flex; gap: 10px; align-items: flex-start; }
+  .insight:hover { transform: translateX(3px); }
+  .insight:last-child { margin-bottom: 0; }
+  .insight.good { border-left-color: var(--sage); }
+  .insight.warn { border-left-color: var(--amber); }
+  .insight.bad  { border-left-color: var(--coral); }
+  .insight strong { color: var(--text); font-weight: 600; }
+  .insight .icon { font-size: 14px; flex-shrink: 0; line-height: 1.35; }
+  .insight .priority { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; flex-shrink: 0; margin-left: auto; }
+  .insight .priority.critical { background: var(--coral-soft); color: var(--coral); }
+  .insight .priority.important { background: var(--amber-soft); color: var(--amber); }
+  .insight .priority.normal { background: var(--surface-3); color: var(--text-dim); }
+  .insight .priority.info { background: var(--sky-soft); color: var(--sky); }
+
+  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .cal-month { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+  .cal-month .year { color: var(--muted); font-weight: 500; margin-left: 6px; }
+  .cal-nav { display: flex; gap: 6px; }
+  .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 7px; margin-bottom: 8px; }
+  .cal-weekdays div { text-align: center; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); padding: 6px 0; }
+  .cal-weekdays div.weekend { color: var(--coral); opacity: 0.7; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+  .cal-cell { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 11px 11px; min-height: 128px; position: relative; cursor: pointer; transition: background 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s; display: flex; flex-direction: column; }
+  .cal-cell:hover { background: var(--surface-3); border-color: var(--border-hi); transform: translateY(-2px); }
+  .cal-cell.other-month { opacity: 0.32; background: var(--bg-2); }
+  .cal-cell.selected { border-color: var(--amber); box-shadow: 0 0 0 1.5px var(--amber), 0 8px 24px -12px rgba(224, 154, 78, 0.4); }
+  .cal-cell.holiday { background: linear-gradient(180deg, rgba(176, 138, 186, 0.08), var(--surface-2)); border-color: rgba(176, 138, 186, 0.3); }
+  .cal-num { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; color: var(--text); font-variant-numeric: tabular-nums; margin-bottom: 8px; }
+  .cal-cell.weekend .cal-num { color: var(--text-dim); }
+  .cal-marks { position: absolute; top: 11px; right: 11px; display: flex; gap: 3px; }
+  .cal-marks .mark { width: 6px; height: 6px; border-radius: 50%; }
+  .cal-marks .mark.attend { background: var(--sage); }
+  .cal-marks .mark.skip { background: var(--coral); }
+  .cal-marks .mark.todo { background: var(--plum); }
+  .cal-marks .mark.email { background: var(--sky); }
+  .cal-marks .mark.holiday { background: var(--plum); }
+  .cal-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin-top: auto; padding-top: 8px; border-top: 1px dashed rgba(255, 255, 255, 0.06); }
+  .cal-stat { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.01em; line-height: 1.2; min-width: 0; font-variant-numeric: tabular-nums; }
+  .cal-stat .stat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .cal-stat .stat-val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-stat.uni { color: #e2957f; }
+  .cal-stat.uni .stat-dot { background: var(--coral); }
+  .cal-stat.job { color: #eab873; }
+  .cal-stat.job .stat-dot { background: var(--amber); }
+  .cal-stat.sleep { color: #96b9d2; }
+  .cal-stat.sleep .stat-dot { background: var(--sky); }
+  .cal-stat.free { color: #a3c497; }
+  .cal-stat.free .stat-dot { background: var(--sage); }
+  .cal-stat.dim { opacity: 0.3; }
+  .cal-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-dim); }
+  .cal-legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .cal-legend .swatch { width: 10px; height: 10px; border-radius: 3px; }
+  .cal-legend .swatch.coral { background: var(--coral); }
+  .cal-legend .swatch.amber { background: var(--amber); }
+  .cal-legend .swatch.sky { background: var(--sky); }
+  .cal-legend .swatch.sage { background: var(--sage); }
+  .cal-legend .swatch.plum { background: var(--plum); }
+  .day-detail { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); animation: cardIn 0.35s ease; }
+  .day-detail-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+  .day-detail-title { font-size: 15px; font-weight: 700; letter-spacing: -0.015em; }
+  .day-detail-sub { font-size: 12px; color: var(--muted); }
+  .detail-list { display: flex; flex-direction: column; gap: 8px; }
+  .detail-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; align-items: center; transition: all 0.2s; }
+  .detail-row:hover { border-color: var(--border-hi); transform: translateX(3px); }
+  .detail-time { font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .detail-title { font-size: 13px; font-weight: 600; }
+  .detail-empty { text-align: center; padding: 24px 12px; color: var(--muted); font-size: 13px; font-style: italic; }
+
+  .donut-wrap { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; }
+  .donut { flex-shrink: 0; filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.35)); }
+  .donut-lg { width: 180px; height: 180px; }
+  .donut-md { width: 140px; height: 140px; }
+  .donut-sm { width: 100px; height: 100px; }
+  .donut-xs { width: 76px; height: 76px; }
+  .donut-circle { transition: stroke-dasharray 1s cubic-bezier(0.4, 0, 0.2, 1), stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1); }
+  .donut-center { fill: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .donut-sub { fill: var(--muted); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+  .donut-legend { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 170px; }
+  .legend-item { display: flex; align-items: center; gap: 9px; font-size: 12px; padding: 4px 0; transition: transform 0.2s; }
+  .legend-item:hover { transform: translateX(2px); }
+  .legend-swatch { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+  .legend-item .name { color: var(--text-dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend-item .value { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+  .bar-row { display: flex; align-items: center; gap: 11px; margin-bottom: 10px; }
+  .bar-row:last-child { margin-bottom: 0; }
+  .bar-label { width: 150px; font-size: 12px; color: var(--text-dim); flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { flex: 1; height: 22px; background: var(--bg-2); border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+  .bar-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; justify-content: flex-end; padding-right: 9px; font-size: 10.5px; font-weight: 700; color: rgba(255, 255, 255, 0.95); transition: width 1s cubic-bezier(0.4, 0, 0.2, 1); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+  .bar-val { font-size: 11.5px; color: var(--text-dim); font-weight: 600; min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .heatmap { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .heat-day { border-radius: 8px; padding: 10px 6px; text-align: center; background: var(--bg-2); border: 1px solid var(--border); transition: transform 0.2s; }
+  .heat-day:hover { transform: translateY(-2px); }
+  .heat-day .d { font-size: 10px; font-weight: 600; color: var(--muted); }
+  .heat-day .n { font-size: 16px; font-weight: 700; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .heat-day.zero .n { color: var(--sage); }
+  .heat-day.low .n { color: var(--amber); }
+  .heat-day.high .n { color: var(--coral); }
+  .heat-day.high { background: var(--coral-soft); border-color: rgba(212, 116, 94, 0.3); }
+
+  .txn-list { display: flex; flex-direction: column; }
+  .txn-item { display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); transition: background 0.15s; border-radius: 8px; }
+  .txn-item:last-child { border-bottom: none; }
+  .txn-item:hover { background: var(--surface-2); padding-left: 8px; padding-right: 8px; }
+  .txn-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; background: var(--surface-3); }
+  .txn-info { min-width: 0; }
+  .txn-desc { font-size: 13px; font-weight: 600; letter-spacing: -0.005em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .txn-meta { font-size: 11px; color: var(--muted); margin-top: 2px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .txn-amount { font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; text-align: right; }
+  .txn-amount.neg { color: var(--coral); }
+  .txn-amount.pos { color: var(--sage); }
+
+  .periodic-list { display: flex; flex-direction: column; gap: 10px; }
+  .periodic-item { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; transition: all 0.2s; }
+  .periodic-item:hover { border-color: var(--border-hi); transform: translateX(3px); }
+  .periodic-item .name { font-size: 13px; font-weight: 600; }
+  .periodic-item .cat { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .periodic-item .amount { font-size: 14px; font-weight: 700; color: var(--coral); font-variant-numeric: tabular-nums; }
+  .periodic-item .due { font-size: 10.5px; padding: 3px 9px; border-radius: var(--r-pill); background: var(--amber-soft); color: var(--amber); font-weight: 600; letter-spacing: 0.03em; }
+  .periodic-item .due.soon { background: var(--coral-soft); color: var(--coral); }
+
+  .ai-panel { position: relative; padding: 18px 20px; border-radius: var(--r-lg); background: linear-gradient(135deg, rgba(176, 138, 186, 0.08), rgba(224, 154, 78, 0.05)); border: 1px solid rgba(176, 138, 186, 0.2); overflow: hidden; }
+  .ai-panel::before { content: ''; position: absolute; top: -50%; right: -10%; width: 240px; height: 240px; background: radial-gradient(circle, rgba(176, 138, 186, 0.12), transparent 70%); border-radius: 50%; animation: floatSlow 8s ease-in-out infinite; }
+  @keyframes floatSlow { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-15px, 15px); } }
+  .ai-panel .ai-head { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--plum); margin-bottom: 14px; position: relative; z-index: 1; }
+  .ai-panel .ai-head::before { content: '✦'; font-size: 13px; animation: sparkle 3s ease-in-out infinite; }
+  @keyframes sparkle { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.15); } }
+  .ai-insight { padding: 12px 14px; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border); border-radius: 10px; font-size: 12.5px; line-height: 1.55; color: var(--text-dim); margin-bottom: 8px; position: relative; z-index: 1; transition: transform 0.2s, border-color 0.2s; display: flex; gap: 10px; align-items: flex-start; }
+  .ai-insight:last-child { margin-bottom: 0; }
+  .ai-insight:hover { transform: translateX(3px); border-color: var(--border-hi); }
+  .ai-insight .emoji { font-size: 15px; flex-shrink: 0; line-height: 1.3; }
+  .ai-insight strong { color: var(--text); font-weight: 600; }
+
+  .email-filters { display: flex; gap: 4px; margin-bottom: 12px; padding: 3px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-pill); width: fit-content; }
+  .email-filter { padding: 5px 12px; font-size: 11px; font-weight: 600; border-radius: var(--r-pill); border: none; background: transparent; color: var(--muted); cursor: pointer; font-family: inherit; transition: all 0.2s; }
+  .email-filter:hover { color: var(--text); }
+  .email-filter.active { background: var(--surface-3); color: var(--text); }
+  .email-list { display: flex; flex-direction: column; gap: 6px; max-height: 460px; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+  .email-list::-webkit-scrollbar { width: 6px; }
+  .email-list::-webkit-scrollbar-track { background: transparent; }
+  .email-list::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+  .email-item { padding: 12px 12px 12px 14px; border-radius: 10px; background: var(--bg-2); border: 1px solid transparent; cursor: pointer; transition: all 0.2s; position: relative; }
+  .email-item:hover { background: var(--surface-2); border-color: var(--border); transform: translateX(2px); }
+  .email-item.unread { background: var(--surface-2); border-color: var(--border); }
+  .email-item.unread::before { content: ''; position: absolute; left: 6px; top: 16px; width: 5px; height: 5px; border-radius: 50%; background: var(--sky); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.85); } }
+  .email-item.expanded { background: var(--surface-3); border-color: var(--border-hi); }
+  .email-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
+  .email-from { font-size: 12px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .email-time { font-size: 10.5px; color: var(--muted); font-weight: 500; flex-shrink: 0; }
+  .email-subject { font-size: 13px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 3px; color: var(--text); }
+  .email-preview { font-size: 12px; color: var(--muted); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .email-item.expanded .email-preview { -webkit-line-clamp: unset; display: block; color: var(--text-dim); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+  .email-tags { display: flex; gap: 4px; margin-top: 6px; }
+
+  .quick-add { display: grid; grid-template-columns: 1fr 70px 110px 120px 44px; gap: 6px; margin-bottom: 12px; }
+  @media (max-width: 700px) { .quick-add { grid-template-columns: 1fr 1fr; } .quick-add > *:first-child { grid-column: 1 / -1; } }
+  .todo-list { display: flex; flex-direction: column; gap: 8px; }
+  .todo-item { display: flex; gap: 11px; padding: 12px 13px; border-radius: 12px; background: var(--bg-2); border: 1px solid var(--border); align-items: flex-start; transition: all 0.2s; }
+  .todo-item:hover { border-color: var(--border-hi); transform: translateX(3px); }
+  .todo-item.done { opacity: 0.45; }
+  .todo-item.done .todo-title { text-decoration: line-through; }
+  .todo-check { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border-hi); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 0; color: transparent; font-size: 11px; font-weight: 700; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); margin-top: 1px; }
+  .todo-check:hover { border-color: var(--sage); transform: scale(1.1); }
+  .todo-check.checked { background: var(--sage); border-color: var(--sage); color: var(--bg); }
+  .todo-body { flex: 1; min-width: 0; }
+  .todo-title { font-size: 13.5px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 5px; }
+  .todo-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--muted); align-items: center; }
+  .todo-suggestion { margin-top: 8px; padding: 9px 11px; border-radius: 8px; background: var(--plum-soft); border: 1px solid rgba(176, 138, 186, 0.25); font-size: 11.5px; color: var(--plum); transition: all 0.2s; }
+  .todo-suggestion label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+  .todo-suggestion input[type="checkbox"] { appearance: none; width: 15px; height: 15px; border: 1.5px solid rgba(176, 138, 186, 0.5); border-radius: 4px; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: transparent; }
+  .todo-suggestion input[type="checkbox"]:checked { background: var(--plum); border-color: var(--plum); }
+  .todo-suggestion input[type="checkbox"]:checked::after { content: '✓'; color: var(--bg); font-size: 10px; font-weight: 700; }
+  .todo-suggestion.no-slot { background: var(--coral-soft); border-color: rgba(212, 116, 94, 0.3); color: var(--coral); }
+  .todo-suggestion.no-slot::before { content: '!'; font-weight: 700; margin-right: 6px; }
+  .todo-delete { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 3px 6px; border-radius: 6px; font-size: 13px; transition: all 0.15s; }
+  .todo-delete:hover { color: var(--coral); background: var(--coral-soft); }
+
+  .skip-item { padding: 14px 0; border-bottom: 1px solid var(--border); }
+  .skip-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .skip-item:first-child { padding-top: 0; }
+  .skip-item .name { font-weight: 600; font-size: 13.5px; letter-spacing: -0.005em; }
+  .skip-item .meta { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+  .skip-item .topic { margin-top: 9px; padding: 8px 11px; border-radius: 8px; background: var(--amber-soft); border-left: 2px solid var(--amber); font-size: 12px; color: var(--amber); }
+  .skip-item .topic strong { color: var(--text); }
+  .status-btn { margin-top: 9px; padding: 5px 11px; font-size: 11px; font-weight: 600; font-family: inherit; background: var(--bg-2); color: var(--text-dim); border: 1px solid var(--border); border-radius: var(--r-pill); cursor: pointer; transition: all 0.2s; }
+  .status-btn.done { background: var(--sage-soft); border-color: rgba(134, 171, 122, 0.35); color: var(--sage); }
+  .status-btn:hover { border-color: var(--border-hi); color: var(--text); }
+
+  .shift-bar { display: flex; height: 44px; border-radius: 12px; overflow: hidden; background: var(--bg-2); border: 1px solid var(--border); margin: 12px 0; }
+  .shift-bar .seg { display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; }
+  .shift-bar .seg.job { background: linear-gradient(135deg, var(--amber), #d4843a); color: #2a1c08; }
+  .shift-bar .seg.off { background: transparent; color: var(--muted); }
+
+  .goal-row { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; }
+  .goal-progress { width: 40px; height: 40px; border-radius: 50%; background: conic-gradient(var(--plum) var(--pct, 0%), rgba(255,255,255,0.06) 0); display: flex; align-items: center; justify-content: center; position: relative; flex-shrink: 0; }
+  .goal-progress::after { content: ''; position: absolute; inset: 4px; background: var(--bg-2); border-radius: 50%; }
+  .goal-progress .pct { position: relative; z-index: 1; font-size: 9.5px; font-weight: 700; color: var(--plum); font-variant-numeric: tabular-nums; }
+  .goal-info { min-width: 0; }
+  .goal-info .name { font-size: 13px; font-weight: 600; }
+  .goal-info .meta { font-size: 11px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+  .empty { color: var(--muted); font-size: 12.5px; padding: 20px 0; text-align: center; font-style: italic; }
+  .note { padding: 11px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .note strong { color: var(--text-dim); }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .row.between { justify-content: space-between; }
+  .row.wrap { flex-wrap: wrap; }
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+  .job-row { display: grid; grid-template-columns: 40px 1fr auto auto; gap: 14px; align-items: center; padding: 14px 16px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; transition: all 0.2s; }
+  .job-row:hover { border-color: var(--border-hi); transform: translateX(3px); }
+  .job-color { width: 10px; height: 40px; border-radius: 6px; flex-shrink: 0; }
+  .job-info { min-width: 0; }
+  .job-info .name { font-size: 14px; font-weight: 600; margin-bottom: 3px; letter-spacing: -0.005em; }
+  .job-info .meta { font-size: 11.5px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .job-info .meta .sep { opacity: 0.4; }
+  .job-hours-big { font-size: 15px; font-weight: 700; color: var(--amber); font-variant-numeric: tabular-nums; text-align: right; }
+  .job-hours-big .unit { font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 3px; }
+  .job-rate { font-size: 11.5px; color: var(--muted); margin-top: 2px; text-align: right; font-variant-numeric: tabular-nums; }
+  .job-days { display: flex; gap: 3px; margin-top: 6px; }
+  .job-day { width: 20px; height: 20px; border-radius: 5px; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; background: var(--surface-3); color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .job-day.on { background: var(--amber-soft); color: var(--amber); }
+
+  .holiday-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 11px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; transition: all 0.2s; }
+  .holiday-row:hover { border-color: var(--border-hi); }
+  .holiday-row .date { font-size: 13px; font-weight: 600; }
+  .holiday-row .dow { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .holiday-row .days-away { font-size: 11px; padding: 3px 9px; border-radius: var(--r-pill); background: var(--plum-soft); color: var(--plum); font-weight: 600; letter-spacing: 0.03em; }
+  .holiday-row .days-away.soon { background: var(--coral-soft); color: var(--coral); }
+  .holiday-row .remove { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 4px 8px; border-radius: 6px; font-size: 13px; transition: all 0.15s; }
+  .holiday-row .remove:hover { color: var(--coral); background: var(--coral-soft); }
+
+  /* NEW: Working days picker */
+  .dow-picker {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .dow-card {
+    padding: 12px 6px 10px;
+    border-radius: 10px;
+    background: var(--surface-3);
+    border: 1.5px solid var(--border);
+    color: var(--muted);
+    font-family: inherit;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .dow-card:hover { border-color: var(--border-hi); }
+  .dow-card .dow-name {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+    display: block;
+  }
+  .dow-card .dow-status {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    display: block;
+    opacity: 0.6;
+  }
+  .dow-card.on {
+    background: var(--amber-soft);
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+  .dow-card.on .dow-status { opacity: 1; }
+  .dow-card.off {
+    background: var(--surface-3);
+    border-color: var(--border);
+    color: var(--muted);
+  }
+  .dow-summary {
+    margin-top: 10px;
+    font-size: 11.5px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .dow-summary strong { color: var(--text-dim); }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 24px; animation: fadeIn 0.2s ease; }
+  .modal-overlay.open { display: flex; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal { background: var(--surface); border: 1px solid var(--border-hi); border-radius: var(--r-lg); width: 100%; max-width: 720px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 32px 80px -20px rgba(0, 0, 0, 0.8); animation: modalIn 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.96) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+  .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .modal-header h3 { font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
+  .modal-header p { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .modal-close { background: transparent; border: none; color: var(--muted); width: 32px; height: 32px; border-radius: 50%; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .modal-close:hover { background: var(--surface-2); color: var(--text); }
+  .modal-body { padding: 22px 24px; overflow-y: auto; flex: 1; }
+  .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+
+  .drop-zone { border: 2px dashed var(--border-hi); border-radius: var(--r-lg); padding: 40px 24px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--bg-2); }
+  .drop-zone:hover { border-color: var(--amber); background: var(--surface-2); }
+  .drop-zone.dragover { border-color: var(--amber); background: var(--surface-3); transform: scale(1.01); }
+  .drop-zone .icon { font-size: 40px; margin-bottom: 12px; opacity: 0.7; }
+  .drop-zone .title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .drop-zone .hint { color: var(--muted); font-size: 12px; }
+  .drop-zone input { display: none; }
+  .or-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+  .or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .paste-area { width: 100%; min-height: 100px; resize: vertical; font-family: ui-monospace, 'SF Mono', monospace; font-size: 12px; line-height: 1.5; }
+  .processing { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 40px 0; }
+  .spinner { width: 40px; height: 40px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--amber); animation: spin 0.8s linear infinite; }
+  .preview-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; }
+  .preview-count { font-size: 14px; font-weight: 700; }
+  .preview-count .num { color: var(--amber); font-size: 18px; }
+  .preview-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-2); }
+  .preview-list::-webkit-scrollbar { width: 6px; }
+  .preview-list::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+  .preview-item { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; padding: 9px 11px; border-radius: 8px; cursor: pointer; transition: background 0.15s; align-items: center; }
+  .preview-item:hover { background: var(--surface-2); }
+  .preview-item input[type="checkbox"] { appearance: none; width: 16px; height: 16px; border: 1.5px solid var(--border-hi); border-radius: 4px; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
+  .preview-item input[type="checkbox"]:checked { background: var(--sage); border-color: var(--sage); }
+  .preview-item input[type="checkbox"]:checked::after { content: '✓'; color: var(--bg); font-size: 11px; font-weight: 700; }
+  .preview-info { min-width: 0; }
+  .preview-name { font-size: 12.5px; font-weight: 600; }
+  .preview-meta { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .preview-time { font-size: 11px; font-weight: 600; color: var(--amber); font-variant-numeric: tabular-nums; }
+  .import-options { display: flex; gap: 8px; margin: 16px 0 4px; padding: 4px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-pill); width: fit-content; }
+  .import-option { padding: 7px 16px; font-size: 12px; font-weight: 600; border-radius: var(--r-pill); border: none; background: transparent; color: var(--muted); cursor: pointer; font-family: inherit; transition: all 0.2s; }
+  .import-option.active { background: var(--amber); color: #2a1c08; }
+  .error-box { padding: 14px 16px; border-radius: 10px; background: var(--coral-soft); border: 1px solid rgba(212, 116, 94, 0.3); color: var(--coral); font-size: 12.5px; line-height: 1.5; }
+  .error-box strong { color: #ffb8a0; }
+
+  .edit-item { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 6px; transition: all 0.2s; }
+  .edit-item:hover { border-color: var(--border-hi); }
+  .edit-item .info { min-width: 0; }
+  .edit-item .name { font-size: 13px; font-weight: 600; }
+  .edit-item .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .edit-item .value { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--coral); }
+  .edit-item .value.pos { color: var(--sage); }
+  .edit-item .remove { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 4px 8px; border-radius: 6px; font-size: 13px; transition: all 0.15s; }
+  .edit-item .remove:hover { color: var(--coral); background: var(--coral-soft); }
+  .edit-form-row { display: grid; gap: 8px; grid-template-columns: 1fr 110px 100px auto; margin-bottom: 16px; }
+  @media (max-width: 640px) { .edit-form-row { grid-template-columns: 1fr 1fr; } }
+  .edit-form-block { display: grid; gap: 12px; margin-bottom: 16px; }
+  .edit-form-block .field-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; display: block; }
+  .edit-form-block .field { display: flex; flex-direction: column; }
+  .edit-form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 640px) { .edit-form-grid-2 { grid-template-columns: 1fr; } }
+  .edit-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 20px 0 10px; }
+  .edit-section-title:first-child { margin-top: 0; }
+
+  .welcome { background: linear-gradient(135deg, rgba(224, 154, 78, 0.08), rgba(176, 138, 186, 0.06)); border: 1px solid rgba(224, 154, 78, 0.2); border-radius: var(--r-lg); padding: 26px 28px; margin-bottom: 24px; position: relative; overflow: hidden; }
+  .welcome::before { content: ''; position: absolute; top: -80px; right: -60px; width: 260px; height: 260px; background: radial-gradient(circle, rgba(224, 154, 78, 0.15), transparent 70%); border-radius: 50%; pointer-events: none; }
+  .welcome h3 { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 6px; position: relative; z-index: 1; }
+  .welcome p { color: var(--text-dim); font-size: 13.5px; margin-bottom: 20px; max-width: 620px; line-height: 1.6; position: relative; z-index: 1; }
+  .welcome-steps { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); position: relative; z-index: 1; }
+  .step { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; display: flex; gap: 14px; align-items: flex-start; transition: all 0.25s; cursor: pointer; text-align: left; }
+  .step:hover { border-color: var(--border-hi); transform: translateY(-2px); background: var(--surface-2); }
+  .step .num { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-3); color: var(--muted); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+  .step.done .num { background: var(--sage); color: #141d10; }
+  .step .content { flex: 1; min-width: 0; }
+  .step .title { font-size: 13.5px; font-weight: 600; margin-bottom: 3px; letter-spacing: -0.005em; }
+  .step .desc { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+  .step .arrow { color: var(--muted); font-size: 16px; align-self: center; }
+
+  body[data-mode="basic"] .chart-only, body[data-mode="basic"] .donut-wrap, body[data-mode="basic"] .heatmap,
+  body[data-mode="basic"] .spark, body[data-mode="basic"] .live-dot, body[data-mode="basic"] .cal-marks,
+  body[data-mode="basic"] .cal-stats, body[data-mode="basic"] .ai-panel::before { display: none !important; }
+  body[data-mode="basic"] .card { padding: 14px 16px; }
+  body[data-mode="basic"] .stat-card .stat { font-size: 24px; }
+  body[data-mode="basic"] .cal-cell { min-height: 60px; padding: 8px 10px; }
+  body[data-mode="basic"] .view.active .stagger > * { animation: none; opacity: 1; transform: none; }
+  body[data-mode="detailed"] .card { padding: 24px 26px; }
+  body[data-mode="detailed"] .stat-card .stat { font-size: 38px; }
+</style>
+</head>
+<body data-mode="normal">
+
+<div class="container">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="btn amber" id="connect-btn" onclick="connectGoogle()">🔗 Connect Google</button>
+      <button class="btn ghost" onclick="openUploadModal()">📄 Upload timetable</button>
+      <div class="sync-indicator" id="sync-indicator" style="display: none;">
+        <span class="dot"></span><span id="sync-text">Sync</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="mode-switch">
+        <button data-mode="basic" onclick="setMode('basic')">Basic</button>
+        <button data-mode="normal" class="active" onclick="setMode('normal')">Normal</button>
+        <button data-mode="detailed" onclick="setMode('detailed')">Detailed</button>
+      </div>
+      <button class="btn ghost small" onclick="resetAll()">Reset</button>
+    </div>
+  </div>
+
+  <div class="nav-wrap">
+    <nav class="nav">
+      <button class="active" data-view="overview">Overview</button>
+      <button data-view="uni">Uni</button>
+      <button data-view="job">Job</button>
+      <button data-view="finances">Finances</button>
+    </nav>
+  </div>
+
+  <main>
+    <section id="view-overview" class="view active"></section>
+    <section id="view-uni" class="view"></section>
+    <section id="view-job" class="view"></section>
+    <section id="view-finances" class="view"></section>
+  </main>
+</div>
+
+<div class="modal-overlay" id="upload-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div><h3>Upload timetable</h3><p>Drop a PDF timetable and I'll parse it automatically</p></div>
+      <button class="modal-close" onclick="closeUploadModal()">✕</button>
+    </div>
+    <div class="modal-body" id="upload-body"></div>
+    <div class="modal-footer" id="upload-footer"><button class="btn ghost" onclick="closeUploadModal()">Cancel</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal" style="max-width: 680px;">
+    <div class="modal-header">
+      <div><h3 id="edit-title">Edit</h3><p id="edit-subtitle"></p></div>
+      <button class="modal-close" onclick="closeEditModal()">✕</button>
+    </div>
+    <div class="modal-body" id="edit-body"></div>
+    <div class="modal-footer"><button class="btn ghost" onclick="closeEditModal()">Done</button></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   BACKEND INTEGRATION
+   ============================================================ */
+let currentUserId = localStorage.getItem('studentOS_userId') || null;
+let liveEmails = null;
+let liveEvents = null;
+let syncStatus = 'idle';
+
+function connectGoogle() { window.location.href = '/auth/login'; }
+
+async function disconnectGoogle() {
+  if (!currentUserId) return;
+  try { await fetch('/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: currentUserId }) }); } catch (e) {}
+  currentUserId = null; liveEmails = null; liveEvents = null; syncStatus = 'idle';
+  localStorage.removeItem('studentOS_userId');
+  updateConnectUI(); updateSyncIndicator(); renderAll();
+}
+
+(async function handleAuthReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const auth = params.get('auth'), userId = params.get('userId');
+  if (auth === 'success' && userId) {
+    currentUserId = userId;
+    localStorage.setItem('studentOS_userId', userId);
+    window.history.replaceState({}, '', window.location.pathname);
+    await fetchLiveData();
+  } else if (auth === 'error') {
+    console.warn('Auth failed:', params.get('reason'));
+    alert(`Google sign-in failed: ${params.get('reason')}`);
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+  updateConnectUI(); updateSyncIndicator();
+})();
+
+async function fetchLiveData() {
+  if (!currentUserId) return;
+  syncStatus = 'syncing'; updateSyncIndicator();
+  try {
+    const gmailRes = await fetch(`/api/gmail/messages?userId=${encodeURIComponent(currentUserId)}&maxResults=20`);
+    if (gmailRes.status === 401) {
+      currentUserId = null; localStorage.removeItem('studentOS_userId');
+      liveEmails = null; liveEvents = null; syncStatus = 'idle';
+      updateConnectUI(); updateSyncIndicator(); renderAll(); return;
+    }
+    if (gmailRes.ok) {
+      const data = await gmailRes.json();
+      liveEmails = (data.messages || []).map(m => ({
+        id: m.id, from: m.from, subject: m.subject, preview: m.snippet,
+        time: relativeTime(m.date), unread: m.unread, important: m.important
+      }));
+    }
+    const calRes = await fetch(`/api/calendar/events?userId=${encodeURIComponent(currentUserId)}&days=14`);
+    if (calRes.ok) { const data = await calRes.json(); liveEvents = data.events || []; }
+    syncStatus = 'live';
+  } catch (err) { console.warn('Live fetch failed:', err); syncStatus = 'error'; }
+  updateSyncIndicator(); renderAll();
+}
+
+function relativeTime(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function updateConnectUI() {
+  const btn = document.getElementById('connect-btn');
+  if (!btn) return;
+  if (currentUserId) {
+    btn.innerHTML = `✓ ${currentUserId.split('@')[0]}`;
+    btn.classList.remove('amber'); btn.classList.add('sage');
+    btn.onclick = () => { if (confirm('Disconnect Google account?')) disconnectGoogle(); };
+  } else {
+    btn.innerHTML = '🔗 Connect Google';
+    btn.classList.add('amber'); btn.classList.remove('sage');
+    btn.onclick = connectGoogle;
+  }
+}
+function updateSyncIndicator() {
+  const ind = document.getElementById('sync-indicator'), txt = document.getElementById('sync-text');
+  if (!ind || !txt) return;
+  if (!currentUserId) { ind.style.display = 'none'; return; }
+  ind.style.display = 'inline-flex';
+  ind.classList.remove('syncing', 'live');
+  if (syncStatus === 'syncing') { ind.classList.add('syncing'); txt.textContent = 'Syncing...'; }
+  else if (syncStatus === 'live') { ind.classList.add('live'); txt.textContent = 'Live'; }
+  else if (syncStatus === 'error') { txt.textContent = 'Sync failed'; }
+  else { txt.textContent = 'Not synced'; }
+}
+function getEmails() { return liveEmails || []; }
+function getLiveEvents() { return liveEvents || []; }
+
+/* ============================================================
+   DATA
+   ============================================================ */
+let CLASSES = [];
+const TRANSACTIONS = [];
+
+function computeAllDates() {
+  if (!CLASSES.length) {
+    const today = new Date();
+    const dow = today.getDay();
+    const daysBack = dow === 0 ? 6 : dow - 1;
+    const start = new Date(today);
+    start.setDate(start.getDate() - daysBack);
+    start.setHours(0, 0, 0, 0);
+    const out = [];
+    for (let i = 0; i < 28; i++) { const d = new Date(start); d.setDate(start.getDate() + i); out.push(isoFrom(d)); }
+    return out;
+  }
+  const dates = [...new Set(CLASSES.map(c => c.date))].sort();
+  const min = parseISO(dates[0]), max = parseISO(dates[dates.length - 1]);
+  const start = new Date(min);
+  const dow = start.getDay();
+  start.setDate(start.getDate() - (dow === 0 ? 6 : dow - 1));
+  const totalDays = Math.max(28, Math.ceil((max - start) / 86400000) + 8);
+  const out = [];
+  for (let i = 0; i < totalDays; i++) { const d = new Date(start); d.setDate(start.getDate() + i); out.push(isoFrom(d)); }
+  return out;
+}
+let ALL_DATES = computeAllDates();
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function isoFrom(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function parseISO(iso) { return new Date(iso + 'T00:00:00'); }
+function fmtTime(h) { const hh = Math.floor(h), mm = Math.round((h - hh) * 60); const period = hh >= 12 ? 'PM' : 'AM'; const d = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh; return mm ? `${d}:${String(mm).padStart(2,'0')} ${period}` : `${d} ${period}`; }
+function fmtTimeShort(h) { const hh = Math.floor(h), mm = Math.round((h - hh) * 60); const period = hh >= 12 ? 'pm' : 'am'; const d = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh; return mm ? `${d}:${String(mm).padStart(2,'0')}${period}` : `${d}${period}`; }
+function fmtRange(a, b) { return `${fmtTime(a)} – ${fmtTime(b)}`; }
+function fmtRangeShort(a, b) { return `${fmtTimeShort(a)}–${fmtTimeShort(b)}`; }
+function fmtDate(iso) { return parseISO(iso).toLocaleDateString('en-GB', { day:'numeric', month:'short' }); }
+function fmtDateLong(iso) { return parseISO(iso).toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' }); }
+function fmtDateFull(iso) { return parseISO(iso).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' }); }
+function dowShort(iso) { return parseISO(iso).toLocaleDateString('en-GB', { weekday:'short' }); }
+function dow(iso) { return parseISO(iso).toLocaleDateString('en-GB', { weekday:'long' }); }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function hFmt(n) { return Number.isInteger(n) ? n + 'h' : n.toFixed(1).replace(/\.0$/, '') + 'h'; }
+function hNum(n) { return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+function money(n) { return (n < 0 ? '-Rs. ' : 'Rs. ') + Math.abs(n).toLocaleString('en-IN'); }
+/* FIX: better compact formatting for donut centers */
+function fmtCompact(n) {
+  const abs = Math.abs(n);
+  if (abs >= 1000000) return (n/1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (abs >= 10000) return Math.round(n/1000) + 'k';
+  if (abs >= 1000) return (n/1000).toFixed(1).replace(/\.0$/, '') + 'k';
+  return Math.round(n).toString();
+}
+function isWeekend(iso) { const d = parseISO(iso).getDay(); return d === 0 || d === 6; }
+function daysAway(iso) { const today = new Date(); today.setHours(0,0,0,0); return Math.round((parseISO(iso) - today) / 86400000); }
+
+/* ============================================================
+   JOB HELPERS
+   ============================================================ */
+function getJobs() { return state.jobs || []; }
+function isHoliday(iso) { return (state.holidays || []).includes(iso); }
+function isWorkDay(iso) {
+  if (isHoliday(iso)) return false;
+  const dow = parseISO(iso).getDay();
+  return getJobs().some(j => j.days && j.days.includes(dow));
+}
+function getJobsOnDay(iso) {
+  if (isHoliday(iso)) return [];
+  const dow = parseISO(iso).getDay();
+  return getJobs().filter(j => j.days && j.days.includes(dow));
+}
+function jobHours(iso) { return getJobsOnDay(iso).reduce((s, j) => s + (j.end - j.start), 0); }
+function totalWeeklyHours() { return getJobs().reduce((t, j) => t + (j.days.length * (j.end - j.start)), 0); }
+function jobEarningsForDate(iso) { return getJobsOnDay(iso).reduce((s, j) => s + (j.end - j.start) * (j.rate || 0), 0); }
+function totalEarningsInPeriod() { return ALL_DATES.reduce((s, d) => s + jobEarningsForDate(d), 0); }
+function dayLetter(n) { return ['S','M','T','W','T','F','S'][n]; }
+function dayName(n) { return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][n]; }
+function decToTimeStr(h) { const hh = Math.floor(h), mm = Math.round((h - hh) * 60); return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`; }
+function timeStrToDec(s) { if (!s) return 0; const [hh, mm] = s.split(':').map(Number); return hh + mm / 60; }
+
+/* FIX: job monthly salaries feed into income */
+function getJobIncomes() {
+  return getJobs()
+    .filter(j => j.salary && j.salary > 0)
+    .map(j => ({
+      id: 'job-salary-' + j.id,
+      name: j.name + ' (monthly)',
+      amount: j.salary,
+      color: j.color || '#e09a4e',
+      fromJob: true
+    }));
+}
+function getAllIncomes() { return [...state.incomes, ...getJobIncomes()]; }
+
+/* FIX: merge recurring into expenses for the money-goes donut */
+function getAllExpenses() {
+  const periodicColors = ['#d4745e', '#e09070', '#c9664f'];
+  const periodicAsExpense = (state.periodic || []).map((p, i) => ({
+    id: 'pe_' + p.id,
+    name: p.name,
+    amount: p.amount,
+    color: periodicColors[i % periodicColors.length],
+    icon: '🔄',
+    isRecurring: true
+  }));
+  return [...state.expenses, ...periodicAsExpense];
+}
+
+/* ============================================================
+   DECISION / CALC
+   ============================================================ */
+/* FIX: only skip if class overlaps with a real job */
+function decideClass(c) {
+  const dayJobs = getJobsOnDay(c.date);
+  const hasConflict = dayJobs.some(j => c.start < j.end && c.end > j.start);
+  if (hasConflict) return { action: 'skip', reason: 'work' };
+  return { action: 'attend', reason: 'attend' };
+}
+function attendedHours(iso) {
+  return CLASSES.filter(c => c.date === iso && decideClass(c).action === 'attend').reduce((s, c) => s + (c.end - c.start), 0);
+}
+function sleepHours() { return 8; }
+function freeHours(iso) { return 24 - sleepHours() - jobHours(iso) - attendedHours(iso); }
+function freeSlotsOnDate(iso) {
+  const busy = [];
+  getJobsOnDay(iso).forEach(j => busy.push([j.start, j.end]));
+  CLASSES.filter(c => c.date === iso && decideClass(c).action === 'attend').forEach(c => busy.push([c.start, c.end]));
+  let slots = [[7, 23]];
+  for (const b of busy) slots = slots.flatMap(s => subtractInterval(s, b));
+  return slots.filter(([s, e]) => e - s >= 0.5);
+}
+function subtractInterval([s, e], [us, ue]) {
+  if (ue <= s || us >= e) return [[s, e]];
+  const out = [];
+  if (s < us) out.push([s, us]);
+  if (e > ue) out.push([ue, e]);
+  return out;
+}
+function todoOccursOn(todo, iso) {
+  if (!todo.startDate) return false;
+  const start = parseISO(todo.startDate), d = parseISO(iso);
+  if (d < start) return false;
+  const diff = Math.round((d - start) / 86400000);
+  switch (todo.recurrence) {
+    case 'once': return diff === 0;
+    case 'daily': return true;
+    case 'every-2-days': return diff % 2 === 0;
+    case 'weekly': return diff % 7 === 0;
+    case 'monthly': return d.getDate() === start.getDate();
+    default: return false;
+  }
+}
+function recurrenceLabel(r) { return { once:'Once', daily:'Daily', 'every-2-days':'Every 2 days', weekly:'Weekly', monthly:'Monthly' }[r] || 'Once'; }
+
+/* ============================================================
+   STATE
+   ============================================================ */
+function seedState() {
+  const today = new Date();
+  return {
+    mode: 'normal',
+    classes: [],
+    catchupStatus: {},
+    todos: [],
+    incomes: [],
+    expenses: [],
+    periodic: [],
+    goals: [],
+    jobs: [],
+    holidays: [],
+    startingBalance: 0,
+    lastMonthBalance: 0,
+    calendarMonth: { year: today.getFullYear(), month: today.getMonth() },
+    selectedDay: isoFrom(today),
+    emailFilter: 'all',
+    expandedEmail: null
+  };
+}
+let state = loadState() || seedState();
+if (state.classes && state.classes.length) CLASSES = state.classes;
+if (!state.jobs) state.jobs = [];
+if (!state.holidays) state.holidays = [];
+ALL_DATES = computeAllDates();
+
+function saveState() { state.classes = CLASSES; try { localStorage.setItem('studentOS_v16', JSON.stringify(state)); } catch(e){} }
+function loadState() { try { const r = localStorage.getItem('studentOS_v16'); return r ? JSON.parse(r) : null; } catch(e){ return null; } }
+
+function resetAll() {
+  if (!confirm('Reset everything? This clears your timetable, jobs, finances, todos, and disconnects Google.')) return;
+  if (currentUserId) disconnectGoogle();
+  localStorage.removeItem('studentOS_v16'); localStorage.removeItem('studentOS_userId');
+  state = seedState(); CLASSES = []; ALL_DATES = computeAllDates();
+  document.body.setAttribute('data-mode', 'normal');
+  saveState(); renderAll();
+}
+function setMode(mode) {
+  state.mode = mode;
+  document.body.setAttribute('data-mode', mode);
+  document.querySelectorAll('.mode-switch button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  saveState();
+}
+
+/* ============================================================
+   PDF UPLOAD
+   ============================================================ */
+let parsedPreview = null;
+let importMode = 'replace';
+
+function openUploadModal() { parsedPreview = null; importMode = 'replace'; document.getElementById('upload-modal').classList.add('open'); renderUploadBody(); renderUploadFooter(); }
+function closeUploadModal() { document.getElementById('upload-modal').classList.remove('open'); }
+
+function renderUploadBody() {
+  const body = document.getElementById('upload-body');
+  if (parsedPreview === null) {
+    body.innerHTML = `
+      <label class="drop-zone" id="drop-zone" for="pdf-input">
+        <div class="icon">📄</div>
+        <div class="title">Drop your timetable PDF here</div>
+        <div class="hint">or click to browse · PDF format</div>
+        <input type="file" id="pdf-input" accept=".pdf,application/pdf" onchange="handlePdfFile(event)" />
+      </label>
+      <div class="or-divider">or paste text</div>
+      <textarea class="input paste-area" id="paste-text" placeholder="Paste the timetable text here..."></textarea>
+      <div style="margin-top: 10px;"><button class="btn ghost small" onclick="parsePastedText()">Parse pasted text</button></div>
+    `;
+    const dz = document.getElementById('drop-zone');
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); const f = e.dataTransfer.files[0]; if (f) handlePdfFile({ target: { files: [f] } }); });
+    return;
+  }
+  if (parsedPreview.error) {
+    body.innerHTML = `<div class="error-box"><strong>Could not parse this file.</strong><br>${esc(parsedPreview.error)}</div><div style="margin-top: 16px;"><button class="btn ghost small" onclick="resetUpload()">Try again</button></div>`;
+    return;
+  }
+  if (parsedPreview.classes.length === 0) {
+    body.innerHTML = `<div class="error-box"><strong>No classes detected.</strong></div><div style="margin-top: 16px;"><button class="btn ghost small" onclick="resetUpload()">Try again</button></div>`;
+    return;
+  }
+  const rows = parsedPreview.classes.map((c, i) => `
+    <label class="preview-item">
+      <input type="checkbox" checked data-idx="${i}" onchange="togglePreviewItem(${i}, this.checked)" />
+      <div class="preview-info">
+        <div class="preview-name">${esc(c.name)}</div>
+        <div class="preview-meta">${fmtDate(c.date)} · ${dowShort(c.date)} · ${esc(c.room || '—')}${c.floor ? ' · ' + esc(c.floor) : ''}</div>
+      </div>
+      <div class="preview-time">${fmtRangeShort(c.start, c.end)}</div>
+    </label>
+  `).join('');
+  body.innerHTML = `
+    <div class="preview-header">
+      <div class="preview-count"><span class="num">${parsedPreview.classes.length}</span> classes detected</div>
+      <button class="btn ghost small" onclick="resetUpload()">Choose different file</button>
+    </div>
+    <div class="import-options">
+      <button class="import-option ${importMode === 'replace' ? 'active' : ''}" onclick="setImportMode('replace')">Replace schedule</button>
+      <button class="import-option ${importMode === 'add' ? 'active' : ''}" onclick="setImportMode('add')">Add to schedule</button>
+    </div>
+    <div class="preview-list" style="margin-top: 14px;">${rows}</div>
+  `;
+}
+function renderUploadFooter() {
+  const footer = document.getElementById('upload-footer');
+  if (parsedPreview && parsedPreview.classes && parsedPreview.classes.length > 0 && !parsedPreview.error) {
+    footer.innerHTML = `<button class="btn ghost" onclick="closeUploadModal()">Cancel</button><button class="btn amber" onclick="confirmImport()">Import ${parsedPreview.classes.length} classes</button>`;
+  } else footer.innerHTML = `<button class="btn ghost" onclick="closeUploadModal()">Cancel</button>`;
+}
+function setImportMode(mode) { importMode = mode; renderUploadBody(); renderUploadFooter(); }
+function resetUpload() { parsedPreview = null; importMode = 'replace'; renderUploadBody(); renderUploadFooter(); }
+function togglePreviewItem(idx, checked) { if (parsedPreview && parsedPreview.classes[idx]) parsedPreview.classes[idx]._enabled = checked; }
+
+async function handlePdfFile(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const body = document.getElementById('upload-body');
+  body.innerHTML = `<div class="processing"><div class="spinner"></div><div style="font-weight: 600;">Reading PDF...</div></div>`;
+  try {
+    const formData = new FormData(); formData.append('pdf', file);
+    const res = await fetch('/api/pdf/parse', { method: 'POST', body: formData });
+    if (!res.ok) {
+      const text = await extractPdfTextLocal(file);
+      const classes = parseTimetableTextLocal(text);
+      if (classes.length === 0) parsedPreview = { error: 'No class entries matched.', raw: text };
+      else parsedPreview = { classes: classes.map(c => ({ ...c, _enabled: true })), raw: text };
+    } else {
+      const data = await res.json();
+      if (!data.classes || data.classes.length === 0) parsedPreview = { error: 'No class entries matched.' };
+      else parsedPreview = { classes: data.classes.map(c => ({ ...c, _enabled: true })) };
+    }
+  } catch (err) { parsedPreview = { error: err.message || String(err) }; }
+  renderUploadBody(); renderUploadFooter();
+}
+
+async function extractPdfTextLocal(file) {
+  if (typeof pdfjsLib === 'undefined') throw new Error('PDF library not loaded.');
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const strings = content.items.map(item => item.str).filter(s => s && s.trim());
+    fullText += strings.join(' ') + ' \n';
+  }
+  return fullText;
+}
+function parseTimetableTextLocal(rawText) {
+  let text = rawText.replace(/\s+/g, ' ').trim();
+  text = text
+    .replace(/(\d{2}-[A-Za-z]{3}-\d{2,4})(?=[A-Z])/g, '$1 ')
+    .replace(/(\d{1,2}:\d{2}\s*[AP]M)\s*[–-]\s*(\d{1,2}:\d{2}\s*[AP]M)/g, '$1 – $2 ')
+    .replace(/(\d{1,2}:\d{2}\s*[AP]M)(?=[A-Z])/g, '$1 ')
+    .replace(/(CS\d+(?:\+CS\d+)*)/g, ' $1 ')
+    .replace(/(\d+(?:st|nd|rd|th)\s+Floor)/gi, ' $1 ')
+    .replace(/\s+/g, ' ');
+  const dateRe = /(\d{1,2})-([A-Za-z]{3})-(\d{2,4})/g;
+  const matches = [...text.matchAll(dateRe)];
+  const entries = [];
+  for (let i = 0; i < matches.length; i++) {
+    const start = matches[i].index;
+    const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+    const parsed = parseChunkLocal(text.slice(start, end).trim());
+    if (parsed) entries.push(parsed);
+  }
+  return entries;
+}
+function parseChunkLocal(chunk) {
+  const dateMatch = chunk.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})/);
+  if (!dateMatch) return null;
+  const monthMap = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+  const monthKey = dateMatch[2].charAt(0).toUpperCase() + dateMatch[2].slice(1).toLowerCase();
+  const month = monthMap[monthKey]; if (month === undefined) return null;
+  const day = parseInt(dateMatch[1]);
+  const yearShort = parseInt(dateMatch[3]);
+  const year = yearShort < 100 ? 2000 + yearShort : yearShort;
+  const date = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  const timeMatch = chunk.match(/(\d{1,2}):(\d{2})\s*([AP]M)\s*[–-]\s*(\d{1,2}):(\d{2})\s*([AP]M)/i);
+  if (!timeMatch) return null;
+  const toDec = (h, m, ap) => { let hh = parseInt(h); if (ap.toUpperCase() === 'PM' && hh !== 12) hh += 12; if (ap.toUpperCase() === 'AM' && hh === 12) hh = 0; return hh + parseInt(m)/60; };
+  const startTime = toDec(timeMatch[1], timeMatch[2], timeMatch[3]);
+  const endTime = toDec(timeMatch[4], timeMatch[5], timeMatch[6]);
+  const afterTime = chunk.slice(chunk.indexOf(timeMatch[0]) + timeMatch[0].length).trim();
+  const typePattern = /^(Departmental Briefing|Course Briefing|Module Briefings?|Guest sessions?|Lecture|Seminar|Lab|Workshop|Tutorial)/i;
+  const typeMatch = afterTime.match(typePattern);
+  let type = 'Class', rest = afterTime;
+  if (typeMatch) { type = typeMatch[1].replace(/s$/, '').trim(); rest = afterTime.slice(typeMatch[0].length).trim(); }
+  const groupMatch = rest.match(/(CS\d+(?:\+CS\d+)*)/);
+  let titlePart = rest;
+  if (groupMatch) { titlePart = rest.slice(0, groupMatch.index).trim(); rest = rest.slice(groupMatch.index + groupMatch[0].length).trim(); }
+  const floorMatch = rest.match(/^(\d+(?:st|nd|rd|th)\s+Floor|Ground Floor|Lower Ground|Basement)/i);
+  let floor = '';
+  if (floorMatch) { floor = floorMatch[1]; rest = rest.slice(floorMatch[0].length).trim(); }
+  const room = rest.replace(/^[-\s]+/, '').trim();
+  let name = titlePart.trim() || type;
+  return { id: 'c_' + date + '_' + Math.round(startTime * 100), date, name, topic: type, start: startTime, end: endTime, floor, room, type };
+}
+function parsePastedText() {
+  const text = document.getElementById('paste-text')?.value || '';
+  if (!text.trim()) return;
+  const classes = parseTimetableTextLocal(text);
+  if (classes.length === 0) parsedPreview = { error: 'No class entries matched.' };
+  else parsedPreview = { classes: classes.map(c => ({ ...c, _enabled: true })) };
+  renderUploadBody(); renderUploadFooter();
+}
+function confirmImport() {
+  if (!parsedPreview || !parsedPreview.classes) return;
+  const toAdd = parsedPreview.classes.filter(c => c._enabled !== false).map(c => { const clean = { ...c }; delete clean._enabled; return clean; });
+  if (toAdd.length === 0) { closeUploadModal(); return; }
+  if (importMode === 'replace') { CLASSES.length = 0; CLASSES.push(...toAdd); }
+  else {
+    const existing = new Set(CLASSES.map(c => `${c.date}|${c.start}|${c.name}`));
+    toAdd.forEach(c => { const key = `${c.date}|${c.start}|${c.name}`; if (!existing.has(key)) { CLASSES.push(c); existing.add(key); } });
+  }
+  ALL_DATES = computeAllDates();
+  if (CLASSES.length) {
+    const first = CLASSES.map(c => c.date).sort()[0];
+    const d = parseISO(first);
+    state.calendarMonth = { year: d.getFullYear(), month: d.getMonth() };
+    state.selectedDay = first;
+  }
+  saveState(); renderAll(); closeUploadModal();
+}
+
+/* ============================================================
+   EDIT MODAL
+   ============================================================ */
+let editType = null;
+const FIN_COLORS = ['#e09a4e', '#86ab7a', '#d4745e', '#b08aba', '#7ca5c4', '#d68a9e'];
+const JOB_COLORS = ['#e09a4e', '#86ab7a', '#d4745e', '#b08aba', '#7ca5c4', '#d68a9e'];
+let jobFormDays = [1,2,3,4,5];
+
+function openEditModal(type) {
+  editType = type;
+  if (type === 'jobs') jobFormDays = [1,2,3,4,5];
+  document.getElementById('edit-modal').classList.add('open');
+  renderEditModal();
+}
+function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); editType = null; renderAll(); }
+
+function renderEditModal() {
+  const body = document.getElementById('edit-body');
+  const title = document.getElementById('edit-title');
+  const subtitle = document.getElementById('edit-subtitle');
+
+  if (editType === 'incomes') {
+    title.textContent = 'Income sources';
+    subtitle.textContent = 'Add or remove where your money comes from';
+    const items = state.incomes.map(i => `
+      <div class="edit-item">
+        <div class="info">
+          <div class="name">${esc(i.name)}</div>
+          <div class="meta"><span style="display:inline-block; width:8px; height:8px; border-radius:2px; background:${i.color}; margin-right:6px; vertical-align:middle;"></span>Income source</div>
+        </div>
+        <div class="value pos">${money(i.amount)}</div>
+        <button class="remove" onclick="removeEditItem('${i.id}')">✕</button>
+      </div>
+    `).join('');
+    const jobIncomes = getJobIncomes().map(i => `
+      <div class="edit-item" style="opacity: 0.7;">
+        <div class="info">
+          <div class="name">${esc(i.name)} <span style="font-size:10px; color: var(--muted); font-weight: 500;">(auto from job)</span></div>
+          <div class="meta">Set in the Job section</div>
+        </div>
+        <div class="value pos">${money(i.amount)}</div>
+        <div style="width: 30px;"></div>
+      </div>
+    `).join('');
+    body.innerHTML = `
+      <div class="edit-section-title">Add income source</div>
+      <div class="edit-form-row">
+        <input class="input" id="edit-name" placeholder="Source name" onkeydown="if(event.key==='Enter')addEditItem()" />
+        <input class="input" id="edit-amount" type="number" placeholder="Amount" onkeydown="if(event.key==='Enter')addEditItem()" />
+        <input class="input" id="edit-extra" disabled style="opacity: 0.4;" />
+        <button class="btn sage" onclick="addEditItem()">Add</button>
+      </div>
+      <div class="edit-section-title">Manual sources (${state.incomes.length})</div>
+      ${items || '<div class="empty">No manual income sources yet.</div>'}
+      ${jobIncomes.length ? `<div class="edit-section-title">From jobs (${jobIncomes.length})</div>${jobIncomes}` : ''}
+    `;
+  }
+  else if (editType === 'expenses') {
+    title.textContent = 'Expense categories';
+    subtitle.textContent = 'Add or remove one-off expense categories';
+    const items = state.expenses.map(x => `
+      <div class="edit-item">
+        <div class="info">
+          <div class="name">${x.icon} ${esc(x.name)}</div>
+          <div class="meta"><span style="display:inline-block; width:8px; height:8px; border-radius:2px; background:${x.color}; margin-right:6px; vertical-align:middle;"></span>One-off category</div>
+        </div>
+        <div class="value">${money(x.amount)}</div>
+        <button class="remove" onclick="removeEditItem('${x.id}')">✕</button>
+      </div>
+    `).join('');
+    const recurring = state.periodic.map(p => `
+      <div class="edit-item" style="opacity: 0.7;">
+        <div class="info">
+          <div class="name">🔄 ${esc(p.name)} <span style="font-size:10px; color: var(--muted); font-weight: 500;">(recurring)</span></div>
+          <div class="meta">Managed in Monthly recurring</div>
+        </div>
+        <div class="value">${money(p.amount)}</div>
+        <div style="width: 30px;"></div>
+      </div>
+    `).join('');
+    body.innerHTML = `
+      <div class="edit-section-title">Add one-off expense</div>
+      <div class="edit-form-row">
+        <input class="input" id="edit-name" placeholder="Expense name" onkeydown="if(event.key==='Enter')addEditItem()" />
+        <input class="input" id="edit-amount" type="number" placeholder="Amount" onkeydown="if(event.key==='Enter')addEditItem()" />
+        <input class="input" id="edit-extra" placeholder="Icon emoji" maxlength="2" />
+        <button class="btn coral" onclick="addEditItem()">Add</button>
+      </div>
+      <div class="edit-section-title">One-off categories (${state.expenses.length})</div>
+      ${items || '<div class="empty">No one-off categories yet.</div>'}
+      ${recurring ? `<div class="edit-section-title">From recurring (${state.periodic.length})</div>${recurring}` : ''}
+    `;
+  }
+  else if (editType === 'periodic') {
+    title.textContent = 'Monthly recurring';
+    subtitle.textContent = 'Add monthly expenses — they appear in your money flow chart too';
+    const total = state.periodic.reduce((s, x) => s + x.amount, 0);
+    const goalOptions = state.goals.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
+    const items = state.periodic.map(p => {
+      const goal = p.goalId ? state.goals.find(g => g.id === p.goalId) : null;
+      return `
+        <div class="edit-item">
+          <div class="info">
+            <div class="name">${esc(p.name)}</div>
+            <div class="meta">${esc(p.cat)} · Day ${p.day}${goal ? ` · <span style="color: var(--plum);">→ ${esc(goal.name)}</span>` : ''}</div>
+          </div>
+          <div class="value">${money(p.amount)}</div>
+          <button class="remove" onclick="removeEditItem('${p.id}')">✕</button>
+        </div>
+      `;
+    }).join('');
+    body.innerHTML = `
+      <div class="edit-section-title">Add recurring expense</div>
+      <div class="edit-form-row">
+        <input class="input" id="edit-name" placeholder="Name (e.g. Netflix)" onkeydown="if(event.key==='Enter')addEditItem()" />
+        <input class="input" id="edit-amount" type="number" placeholder="Amount" onkeydown="if(event.key==='Enter')addEditItem()" />
+        <input class="input" id="edit-extra" type="number" min="1" max="28" placeholder="Day" />
+        <button class="btn amber" onclick="addEditItem()">Add</button>
+      </div>
+      ${state.goals.length ? `
+      <div class="edit-form-block" style="margin-top: -8px;">
+        <div class="field">
+          <label class="field-label">Contribute to a savings goal (optional)</label>
+          <select class="select" id="edit-goal">
+            <option value="">None</option>
+            ${goalOptions}
+          </select>
+        </div>
+        <div class="field">
+          <label class="field-label">Amount to save per month (optional)</label>
+          <input class="input" id="edit-goal-amount" type="number" placeholder="e.g. 500" />
+        </div>
+      </div>
+      ` : ''}
+      <div class="edit-section-title">Existing recurring (${state.periodic.length})${state.periodic.length ? ' — ' + money(total) + '/mo' : ''}</div>
+      ${items || '<div class="empty">No recurring expenses yet.</div>'}
+    `;
+  }
+  else if (editType === 'goals') {
+    title.textContent = 'Savings goals';
+    subtitle.textContent = 'Add or remove savings targets';
+    const items = state.goals.map(g => {
+      const pct = Math.round((g.saved / g.target) * 100);
+      return `
+        <div class="edit-item">
+          <div class="info">
+            <div class="name">${esc(g.name)}</div>
+            <div class="meta">${pct}% saved · ${money(g.saved)} of ${money(g.target)}</div>
+          </div>
+          <div class="value pos">${money(g.target)}</div>
+          <button class="remove" onclick="removeEditItem('${g.id}')">✕</button>
+        </div>
+      `;
+    }).join('');
+    body.innerHTML = `
+      <div class="edit-section-title">Add savings goal</div>
+      <div class="edit-form-row">
+        <input class="input" id="edit-name" placeholder="Goal name" onkeydown="if(event.key==='Enter')addEditItem()" />
+        <input class="input" id="edit-amount" type="number" placeholder="Target amount" onkeydown="if(event.key==='Enter')addEditItem()" />
+        <input class="input" id="edit-extra" type="number" placeholder="Already saved" />
+        <button class="btn plum" onclick="addEditItem()">Add</button>
+      </div>
+      <div class="edit-section-title">Existing goals (${state.goals.length})</div>
+      ${items || '<div class="empty">No goals yet.</div>'}
+    `;
+  }
+  else if (editType === 'balance') {
+    title.textContent = 'Balance settings';
+    subtitle.textContent = 'Set your starting balance and last month balance';
+    body.innerHTML = `
+      <div class="edit-section-title">Current balance settings</div>
+      <div style="display: grid; gap: 14px;">
+        <div>
+          <label style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px;">Starting balance (money you had at period start)</label>
+          <input class="input" id="edit-starting" type="number" value="${state.startingBalance}" />
+        </div>
+        <div>
+          <label style="font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px;">Last month balance (for growth calculation)</label>
+          <input class="input" id="edit-lastmonth" type="number" value="${state.lastMonthBalance}" />
+        </div>
+        <button class="btn plum" onclick="saveBalanceSettings()">Save</button>
+      </div>
+      <div class="note" style="margin-top: 16px;">Current balance = starting balance + net (income − expenses). Growth % compares against your last month balance.</div>
+    `;
+  }
+  else if (editType === 'jobs') {
+    title.textContent = 'Jobs';
+    subtitle.textContent = 'Add or remove your jobs';
+    const jobsList = state.jobs.length ? state.jobs.map(j => {
+      const hours = j.end - j.start;
+      const weeklyH = j.days.length * hours;
+      const daysText = j.days.slice().sort((a,b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b)).map(d => dayName(d)).join(', ');
+      return `
+        <div class="edit-item">
+          <div class="info">
+            <div class="name"><span style="display:inline-block; width:8px; height:8px; border-radius:2px; background:${j.color}; margin-right:6px; vertical-align:middle;"></span>${esc(j.name)}</div>
+            <div class="meta">${fmtRange(j.start, j.end)} · ${daysText} · ${hFmt(weeklyH)}/week${j.salary ? ' · Rs. ' + j.salary + ' monthly salary' : (j.rate ? ' · Rs. ' + j.rate + '/h' : '')}</div>
+          </div>
+          <div class="value pos">${hFmt(weeklyH)}</div>
+          <button class="remove" onclick="removeEditItem('${j.id}')">✕</button>
+        </div>
+      `;
+    }).join('') : '';
+
+    const dowPicker = [1,2,3,4,5,6,0].map(d => {
+      const on = jobFormDays.includes(d);
+      return `
+        <button class="dow-card ${on ? 'on' : 'off'}" onclick="toggleJobDay(${d}, this)" type="button">
+          <span class="dow-name">${dayName(d).slice(0,3)}</span>
+          <span class="dow-status">${on ? 'WORK' : 'OFF'}</span>
+        </button>
+      `;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="edit-section-title">Add a job</div>
+      <div class="edit-form-block">
+        <div class="field">
+          <label class="field-label">Job name</label>
+          <input class="input" id="job-name" placeholder="e.g. Café, Tutoring, Library assistant" />
+        </div>
+        <div class="edit-form-grid-2">
+          <div class="field">
+            <label class="field-label">Start time</label>
+            <input class="input" id="job-start" type="time" value="13:00" />
+          </div>
+          <div class="field">
+            <label class="field-label">End time</label>
+            <input class="input" id="job-end" type="time" value="21:00" />
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label">Working days — tap to toggle</label>
+          <div class="dow-picker">${dowPicker}</div>
+          <div class="dow-summary">
+            <span><strong>${jobFormDays.length}</strong> working day${jobFormDays.length !== 1 ? 's' : ''}</span>
+            <span><strong>${7 - jobFormDays.length}</strong> off</span>
+          </div>
+        </div>
+        <div class="edit-form-grid-2">
+          <div class="field">
+            <label class="field-label">Hourly rate (optional)</label>
+            <input class="input" id="job-rate" type="number" placeholder="e.g. 180" />
+          </div>
+          <div class="field">
+            <label class="field-label">Monthly salary (optional)</label>
+            <input class="input" id="job-salary" type="number" placeholder="e.g. 18000" />
+          </div>
+        </div>
+        <div class="note" style="margin-top: -4px;">Monthly salary will automatically show up as an income source in Finances.</div>
+        <button class="btn amber" onclick="addJob()" style="margin-top: 4px;">Add job</button>
+      </div>
+      <div class="edit-section-title">Your jobs (${state.jobs.length})</div>
+      ${jobsList || '<div class="empty">No jobs added yet. Add one above.</div>'}
+    `;
+  }
+  else if (editType === 'holidays') {
+    title.textContent = 'Holidays';
+    subtitle.textContent = 'Days off — no work shifts scheduled';
+    const sorted = [...state.holidays].sort();
+    const items = sorted.map(d => {
+      const away = daysAway(d);
+      const label = away === 0 ? 'Today' : away === 1 ? 'Tomorrow' : away > 0 ? `In ${away} days` : `${Math.abs(away)} days ago`;
+      const soon = away >= 0 && away <= 3;
+      return `
+        <div class="holiday-row">
+          <div>
+            <div class="date">${fmtDateFull(d)}</div>
+            <div class="dow">Day off</div>
+          </div>
+          <div class="days-away ${soon ? 'soon' : ''}">${label}</div>
+          <button class="remove" onclick="removeHoliday('${d}')">✕</button>
+        </div>
+      `;
+    }).join('');
+    body.innerHTML = `
+      <div class="edit-section-title">Add a holiday</div>
+      <div class="edit-form-row">
+        <input class="input" id="holiday-date" type="date" />
+        <input class="input" id="holiday-label" placeholder="—" disabled style="opacity: 0.4;" />
+        <div></div>
+        <button class="btn plum" onclick="addHoliday()">Add</button>
+      </div>
+      <div class="edit-section-title">Upcoming holidays (${state.holidays.length})</div>
+      ${items || '<div class="empty">No holidays added yet.</div>'}
+    `;
+  }
+}
+
+function addEditItem() {
+  const name = (document.getElementById('edit-name')?.value || '').trim();
+  const amount = parseFloat(document.getElementById('edit-amount')?.value);
+  const extra = document.getElementById('edit-extra')?.value || '';
+  if (!name || !amount || amount <= 0) return;
+
+  if (editType === 'incomes') state.incomes.push({ id: 'i' + Date.now(), name, amount, color: FIN_COLORS[state.incomes.length % FIN_COLORS.length] });
+  else if (editType === 'expenses') state.expenses.push({ id: 'x' + Date.now(), name, amount, icon: extra || '💸', color: FIN_COLORS[state.expenses.length % FIN_COLORS.length] });
+  else if (editType === 'periodic') {
+    const goalId = document.getElementById('edit-goal')?.value || null;
+    const goalAmount = parseFloat(document.getElementById('edit-goal-amount')?.value) || 0;
+    const p = { id: 'p' + Date.now(), name, cat: 'Other', amount, day: Math.min(Math.max(parseInt(extra) || 1, 1), 28), frequency: 'Monthly' };
+    if (goalId && goalAmount > 0) { p.goalId = goalId; p.goalAmount = goalAmount; }
+    state.periodic.push(p);
+    if (goalId && goalAmount > 0) {
+      const goal = state.goals.find(g => g.id === goalId);
+      if (goal) goal.saved += goalAmount;
+    }
+  }
+  else if (editType === 'goals') state.goals.push({ id: 'g' + Date.now(), name, target: amount, saved: parseFloat(extra) || 0, color: FIN_COLORS[state.goals.length % FIN_COLORS.length] });
+  renderEditModal();
+}
+
+function removeEditItem(id) {
+  if (editType === 'incomes') state.incomes = state.incomes.filter(i => i.id !== id);
+  else if (editType === 'expenses') state.expenses = state.expenses.filter(x => x.id !== id);
+  else if (editType === 'periodic') state.periodic = state.periodic.filter(p => p.id !== id);
+  else if (editType === 'goals') state.goals = state.goals.filter(g => g.id !== id);
+  else if (editType === 'jobs') state.jobs = state.jobs.filter(j => j.id !== id);
+  renderEditModal();
+}
+function saveBalanceSettings() {
+  const starting = parseFloat(document.getElementById('edit-starting').value);
+  const lastMonth = parseFloat(document.getElementById('edit-lastmonth').value);
+  if (!isNaN(starting)) state.startingBalance = starting;
+  if (!isNaN(lastMonth)) state.lastMonthBalance = lastMonth;
+  closeEditModal();
+}
+function toggleJobDay(d, btn) {
+  const idx = jobFormDays.indexOf(d);
+  if (idx >= 0) { jobFormDays.splice(idx, 1); if (btn) { btn.classList.remove('on'); btn.classList.add('off'); const s = btn.querySelector('.dow-status'); if (s) s.textContent = 'OFF'; } }
+  else { jobFormDays.push(d); if (btn) { btn.classList.add('on'); btn.classList.remove('off'); const s = btn.querySelector('.dow-status'); if (s) s.textContent = 'WORK'; } }
+  const summary = document.querySelector('.dow-summary');
+  if (summary) summary.innerHTML = `<span><strong>${jobFormDays.length}</strong> working day${jobFormDays.length !== 1 ? 's' : ''}</span><span><strong>${7 - jobFormDays.length}</strong> off</span>`;
+}
+function addJob() {
+  const name = (document.getElementById('job-name')?.value || '').trim();
+  const startStr = document.getElementById('job-start')?.value;
+  const endStr = document.getElementById('job-end')?.value;
+  const rateStr = document.getElementById('job-rate')?.value;
+  const salaryStr = document.getElementById('job-salary')?.value;
+
+  if (!name) { alert('Please enter a job name.'); return; }
+  if (!startStr || !endStr) { alert('Please enter start and end times.'); return; }
+  const start = timeStrToDec(startStr), end = timeStrToDec(endStr);
+  if (end <= start) { alert('End time must be after start time.'); return; }
+  if (!jobFormDays.length) { alert('Please select at least one working day.'); return; }
+
+  state.jobs.push({
+    id: 'j' + Date.now(),
+    name, start, end,
+    days: [...jobFormDays].sort(),
+    rate: parseFloat(rateStr) || 0,
+    salary: parseFloat(salaryStr) || 0,
+    color: JOB_COLORS[state.jobs.length % JOB_COLORS.length]
+  });
+  renderEditModal();
+}
+function addHoliday() {
+  const dateStr = document.getElementById('holiday-date')?.value;
+  if (!dateStr || state.holidays.includes(dateStr)) return;
+  state.holidays.push(dateStr); state.holidays.sort();
+  renderEditModal();
+}
+function removeHoliday(dateStr) {
+  state.holidays = state.holidays.filter(d => d !== dateStr);
+  renderEditModal();
+}
+
+/* ============================================================
+   CHART HELPERS
+   ============================================================ */
+function donutChart(data, size, options = {}) {
+  const { centerText = '', subText = '', thickness = 6 } = options;
+  const r = 15.915;
+  const total = data.reduce((s, d) => s + Math.abs(d.amount), 0) || 1;
+  let offset = 0;
+  const circles = data.map(d => {
+    const pct = (Math.abs(d.amount) / total) * 100;
+    const circle = `<circle class="donut-circle" cx="21" cy="21" r="${r}" fill="none" stroke="${d.color}" stroke-width="${thickness}" stroke-dasharray="${pct} 100" stroke-dashoffset="-${offset}" transform="rotate(-90 21 21)"/>`;
+    offset += pct;
+    return circle;
+  }).join('');
+  const sizeClass = { lg:'donut-lg', md:'donut-md', sm:'donut-sm', xs:'donut-xs' }[size] || 'donut-xs';
+  const fontMap = { lg: { center: 5.8, sub: 2.2, centerY: 19.8, subY: 25.0 }, md: { center: 5.0, sub: 1.9, centerY: 20.2, subY: 24.6 }, sm: { center: 4.2, sub: 0, centerY: 21, subY: 0 }, xs: { center: 3.6, sub: 0, centerY: 21, subY: 0 } };
+  const f = fontMap[size] || fontMap.xs;
+  const hasSub = subText && f.sub > 0;
+  const cy = hasSub ? f.centerY : 21;
+  return `
+    <svg class="donut ${sizeClass}" viewBox="0 0 42 42">
+      <circle cx="21" cy="21" r="${r}" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="${thickness}"/>
+      ${circles}
+      ${centerText ? `<text x="21" y="${cy}" text-anchor="middle" dominant-baseline="middle" class="donut-center" style="font-size: ${f.center}px;">${centerText}</text>` : ''}
+      ${hasSub ? `<text x="21" y="${f.subY}" text-anchor="middle" dominant-baseline="middle" class="donut-sub" style="font-size: ${f.sub}px;">${subText}</text>` : ''}
+    </svg>
+  `;
+}
+function progressRing(pct, color, size = 'md', centerText = '') {
+  const r = 15.915;
+  const dashArray = `${Math.min(Math.max(pct, 0), 100)} 100`;
+  const sizeClass = { lg:'donut-lg', md:'donut-md', sm:'donut-sm', xs:'donut-xs' }[size] || 'donut-xs';
+  const fontSizes = { lg: 5.8, md: 5.2, sm: 4.4, xs: 3.8 };
+  const fs = fontSizes[size] || 4;
+  return `
+    <svg class="donut ${sizeClass}" viewBox="0 0 42 42">
+      <circle cx="21" cy="21" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="5"/>
+      <circle class="donut-circle" cx="21" cy="21" r="${r}" fill="none" stroke="${color}" stroke-width="5" stroke-dasharray="${dashArray}" stroke-dashoffset="0" transform="rotate(-90 21 21)" stroke-linecap="round"/>
+      <text x="21" y="21" text-anchor="middle" dominant-baseline="middle" class="donut-center" style="font-size: ${fs}px;">${centerText || Math.round(pct) + '%'}</text>
+    </svg>
+  `;
+}
+
+/* ============================================================
+   SCHEDULE BUILD
+   ============================================================ */
+function buildSchedule() {
+  const rows = [], skipped = [], attended = [];
+  CLASSES.forEach(c => {
+    const decision = decideClass(c);
+    if (decision.action === 'skip') {
+      const skipId = 'skip_' + c.id;
+      skipped.push({
+        id: skipId, classId: c.id, className: c.name, topic: c.topic || '', type: c.type || '',
+        date: c.date, start: c.start, end: c.end, hoursMissed: c.end - c.start,
+        floor: c.floor, room: c.room, status: state.catchupStatus[skipId] || 'pending'
+      });
+      rows.push({ ...c, skipped: true, skipId, decision });
+    } else {
+      attended.push({ ...c, decision });
+      rows.push({ ...c, skipped: false, decision });
+    }
+  });
+  return { rows, skipped, attended };
+}
+let schedule = null;
+let todoInstances = [];
+
+function placeTodos() {
+  const instances = [];
+  const usage = {};
+  ALL_DATES.forEach(d => usage[d] = []);
+  const sorted = [...state.todos].sort((a, b) => {
+    const order = { high: 0, med: 1, low: 2 };
+    return order[a.priority] - order[b.priority];
+  });
+  for (const todo of sorted) {
+    if (todo.recurrence === 'once' && todo.completed) continue;
+    // FIX: only include in calendar if user has scheduled it (or hasn't unscheduled it)
+    if (todo.scheduledOnCalendar === false) continue;
+    let dates;
+    if (todo.recurrence === 'once') dates = [todo.startDate];
+    else dates = ALL_DATES.filter(d => todoOccursOn(todo, d) && !todo.completedDates.includes(d));
+    for (const date of dates) {
+      if (!date) continue;
+      const slots = freeSlotsOnDate(date);
+      let available = slots.map(s => [...s]);
+      for (const u of usage[date]) available = available.flatMap(a => subtractInterval(a, u));
+      for (const [s, e] of available) {
+        if (e - s >= todo.hours) {
+          instances.push({ todoId: todo.id, date, start: s, end: s + todo.hours });
+          usage[date].push([s, s + todo.hours]);
+          break;
+        }
+      }
+    }
+  }
+  return instances;
+}
+
+function animateCountUp() {
+  document.querySelectorAll('[data-countup]').forEach(el => {
+    const target = parseFloat(el.getAttribute('data-countup'));
+    if (isNaN(target)) return;
+    const isMoney = el.getAttribute('data-money') === 'true';
+    const isDecimal = target % 1 !== 0;
+    const isPercent = el.getAttribute('data-percent') === 'true';
+    const dur = 900, start = performance.now();
+    function tick(now) {
+      const p = Math.min((now - start) / dur, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const val = target * eased;
+      if (isMoney) el.textContent = (val < 0 ? '-Rs. ' : 'Rs. ') + Math.abs(Math.round(val)).toLocaleString('en-IN');
+      else if (isPercent) el.textContent = (val >= 0 ? '+' : '') + val.toFixed(1) + '%';
+      else if (isDecimal) el.textContent = val.toFixed(1) + 'h';
+      else el.textContent = Math.round(val);
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+function renderAll() {
+  schedule = buildSchedule();
+  todoInstances = placeTodos();
+  renderOverview();
+  renderUni();
+  renderJob();
+  renderFinance();
+  saveState();
+  setTimeout(animateCountUp, 50);
+}
+
+/* ============================================================
+   CALENDAR
+   ============================================================ */
+function getMonthGrid(year, month) {
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+  const startDow = first.getDay();
+  const daysInMonth = last.getDate();
+  const cells = [];
+  for (let i = startDow - 1; i >= 0; i--) { const d = new Date(year, month, -i); cells.push({ iso: isoFrom(d), other: true }); }
+  for (let i = 1; i <= daysInMonth; i++) cells.push({ iso: isoFrom(new Date(year, month, i)), other: false });
+  while (cells.length % 7 !== 0) {
+    const lastCell = cells[cells.length - 1].iso;
+    const next = parseISO(lastCell); next.setDate(next.getDate() + 1);
+    cells.push({ iso: isoFrom(next), other: true });
+  }
+  return cells;
+}
+function getDayEvents(iso, filter) {
+  const events = [];
+  if (filter === 'uni' || filter === 'all') {
+    CLASSES.filter(c => c.date === iso && decideClass(c).action === 'attend').forEach(c => events.push({ type:'attend', label: c.name, time: fmtRangeShort(c.start, c.end) }));
+    CLASSES.filter(c => c.date === iso && decideClass(c).action === 'skip').forEach(c => events.push({ type:'skip', label: c.name, time: fmtRangeShort(c.start, c.end) }));
+  }
+  if (filter === 'all') {
+    if (isHoliday(iso)) { events.push({ type:'holiday', label:'Holiday — day off', time:'All day' }); }
+    else { getJobsOnDay(iso).forEach(j => events.push({ type:'job', label: j.name, time: fmtRangeShort(j.start, j.end) })); }
+    todoInstances.filter(i => i.date === iso).forEach(i => {
+      const t = state.todos.find(x => x.id === i.todoId);
+      if (t) events.push({ type:'todo', label: t.title, time: fmtRangeShort(i.start, i.end) });
+    });
+    const liveToday = getLiveEvents().filter(e => e.start && e.start.slice(0,10) === iso);
+    liveToday.forEach(e => {
+      const timeStr = e.allDay ? 'All day' : new Date(e.start).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+      events.push({ type:'email', label: e.summary, time: timeStr });
+    });
+  }
+  return events;
+}
+function calStatRow(hours, cls) {
+  const dim = hours <= 0 ? ' dim' : '';
+  return `<div class="cal-stat ${cls}${dim}"><span class="stat-dot"></span><span class="stat-val">${hNum(hours)}h</span></div>`;
+}
+function renderCalendarBlock(filter = 'all') {
+  const { year, month } = state.calendarMonth;
+  const monthName = new Date(year, month).toLocaleDateString('en-GB', { month:'long' });
+  const cells = getMonthGrid(year, month);
+  const weekdays = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const headerHtml = weekdays.map((d, i) => `<div class="${i === 0 || i === 6 ? 'weekend' : ''}">${d}</div>`).join('');
+  const cellsHtml = cells.map(cell => {
+    const events = getDayEvents(cell.iso, filter);
+    const hasAttend = events.some(e => e.type === 'attend');
+    const hasSkip = events.some(e => e.type === 'skip');
+    const hasTodo = events.some(e => e.type === 'todo');
+    const hasEmail = events.some(e => e.type === 'email');
+    const holiday = isHoliday(cell.iso);
+    const dayNum = parseISO(cell.iso).getDate();
+    const weekend = isWeekend(cell.iso);
+    const selected = state.selectedDay === cell.iso;
+    const uni = attendedHours(cell.iso), job = jobHours(cell.iso), sleep = sleepHours(), free = freeHours(cell.iso);
+    const cls = ['cal-cell'];
+    if (cell.other) cls.push('other-month');
+    if (weekend) cls.push('weekend');
+    if (selected) cls.push('selected');
+    if (holiday) cls.push('holiday');
+    const marks = [];
+    if (hasAttend) marks.push('<span class="mark attend"></span>');
+    if (hasSkip) marks.push('<span class="mark skip"></span>');
+    if (holiday) marks.push('<span class="mark holiday"></span>');
+    if (hasTodo) marks.push('<span class="mark todo"></span>');
+    if (hasEmail) marks.push('<span class="mark email"></span>');
+    return `
+      <div class="${cls.join(' ')}" onclick="selectDay('${cell.iso}')">
+        <div class="cal-num">${dayNum}</div>
+        <div class="cal-marks">${marks.join('')}</div>
+        <div class="cal-stats">
+          ${calStatRow(uni, 'uni')}${calStatRow(job, 'job')}
+          ${calStatRow(sleep, 'sleep')}${calStatRow(free, 'free')}
+        </div>
+      </div>
+    `;
+  }).join('');
+  const selEvents = getDayEvents(state.selectedDay, filter);
+  const detailHtml = selEvents.length
+    ? selEvents.map(e => {
+        const tagClass = { attend:'sage', skip:'coral', job:'amber', todo:'plum', email:'sky', holiday:'plum' }[e.type];
+        const tagLabel = { attend:'Class', skip:'Skipped', job:'Work', todo:'Task', email:'Event', holiday:'Holiday' }[e.type];
+        return `<div class="detail-row"><div class="detail-time">${esc(e.time) || '—'}</div><div><div class="detail-title">${esc(e.label)}</div></div><span class="pill ${tagClass}">${tagLabel}</span></div>`;
+      }).join('')
+    : '<div class="detail-empty">Nothing scheduled this day.</div>';
+  const legendHtml = filter === 'uni'
+    ? `<div class="cal-legend"><span><span class="swatch coral"></span>Uni hours</span><span><span class="swatch sage"></span>Free hours</span></div>`
+    : `<div class="cal-legend">
+        <span><span class="swatch coral"></span>Uni hours</span>
+        <span><span class="swatch amber"></span>Job hours</span>
+        <span><span class="swatch sky"></span>Sleep hours</span>
+        <span><span class="swatch sage"></span>Free hours</span>
+        <span><span class="swatch plum"></span>Holiday</span>
+      </div>`;
+  return `
+    <div class="card">
+      <div class="cal-header">
+        <div class="cal-month">${monthName}<span class="year">${year}</span></div>
+        <div class="cal-nav">
+          <button class="btn ghost icon" onclick="changeMonth(-1)">‹</button>
+          <button class="btn ghost icon" onclick="changeMonth(1)">›</button>
+        </div>
+      </div>
+      <div class="cal-weekdays">${headerHtml}</div>
+      <div class="cal-grid">${cellsHtml}</div>
+      ${legendHtml}
+      <div class="day-detail">
+        <div class="day-detail-header">
+          <div class="day-detail-title">${fmtDateLong(state.selectedDay)}</div>
+          <div class="day-detail-sub">${hFmt(freeHours(state.selectedDay))} free · ${selEvents.length} event${selEvents.length !== 1 ? 's' : ''}</div>
+        </div>
+        <div class="detail-list">${detailHtml}</div>
+      </div>
+    </div>
+  `;
+}
+function changeMonth(delta) {
+  let { year, month } = state.calendarMonth;
+  month += delta;
+  if (month < 0) { month = 11; year--; }
+  if (month > 11) { month = 0; year++; }
+  state.calendarMonth = { year, month };
+  renderAll();
+}
+function selectDay(iso) { state.selectedDay = iso; renderAll(); }
+
+/* ============================================================
+   INSIGHTS
+   ============================================================ */
+function hasAnyData() {
+  return CLASSES.length > 0 || state.todos.length > 0 || state.incomes.length > 0 || state.expenses.length > 0 || state.goals.length > 0 || state.periodic.length > 0 || state.jobs.length > 0 || (liveEmails && liveEmails.length > 0) || currentUserId;
+}
+function buildInsights() {
+  const out = [];
+  const totalFree = ALL_DATES.reduce((s, d) => s + freeHours(d), 0);
+  const avgFree = totalFree / ALL_DATES.length;
+  const skipped = schedule.skipped.length;
+  const pendingTodos = state.todos.filter(t => !isTodoFullyDone(t)).length;
+  const pendingSkips = schedule.skipped.filter(s => s.status === 'pending').length;
+
+  if (!hasAnyData()) {
+    out.push({ pri: 0, importance:'info', type:'good', icon:'👋', html:`<strong>Welcome.</strong> Start by uploading your timetable or connecting Google.` });
+    return out;
+  }
+  if (pendingSkips >= 3) out.push({ pri: 0, importance:'critical', type:'bad', icon:'⚠️', html:`<strong>${pendingSkips} skipped sessions</strong> still need catch-up.` });
+  if (pendingTodos >= 3) out.push({ pri: 0, importance:'critical', type:'bad', icon:'⏳', html:`<strong>${pendingTodos} tasks pending.</strong>` });
+  if (skipped > 0 && pendingSkips < 3) out.push({ pri: 1, importance:'important', type:'warn', icon:'📘', html:`<strong>${skipped} session${skipped !== 1 ? 's' : ''} skipped</strong> due to work conflicts.` });
+  if (pendingTodos > 0 && pendingTodos < 3) out.push({ pri: 1, importance:'important', type:'warn', icon:'📌', html:`<strong>${pendingTodos} task${pendingTodos !== 1 ? 's' : ''}</strong> in progress.` });
+  if (CLASSES.length || state.todos.length) out.push({ pri: 2, importance:'normal', type:'good', icon:'☀️', html:`<strong>Plan your week.</strong> Check your calendar for free slots.` });
+  if (pendingTodos === 0 && pendingSkips === 0 && hasAnyData()) out.push({ pri: 2, importance:'normal', type:'good', icon:'✅', html:`You're all caught up.` });
+  if (CLASSES.length) out.push({ pri: 3, importance:'info', type:'good', icon:'⏱️', html:`<strong>${hFmt(totalFree)}</strong> of free time — <strong>${hFmt(avgFree)}/day</strong>.` });
+  out.sort((a, b) => a.pri - b.pri);
+  return out;
+}
+function renderInsights() {
+  return buildInsights().map(i => `
+    <div class="insight ${i.type}">
+      <span class="icon">${i.icon}</span>
+      <span style="flex: 1;">${i.html}</span>
+      <span class="priority ${i.importance}">${i.importance}</span>
+    </div>
+  `).join('');
+}
+
+/* ============================================================
+   WELCOME
+   ============================================================ */
+function renderWelcome() {
+  const hasClasses = CLASSES.length > 0;
+  const hasJobs = state.jobs.length > 0;
+  const hasGoogle = !!currentUserId;
+  const hasFinances = state.incomes.length > 0 || state.expenses.length > 0 || state.jobs.some(j => j.salary > 0);
+  const allDone = hasClasses && hasGoogle && hasFinances && hasJobs;
+  if (allDone) return '';
+  return `
+    <div class="welcome">
+      <h3>Welcome to your dashboard</h3>
+      <p>Nothing's set up yet. Here's how to get started — do these in any order, and come back to them anytime.</p>
+      <div class="welcome-steps">
+        <button class="step ${hasClasses ? 'done' : ''}" onclick="openUploadModal()">
+          <div class="num">${hasClasses ? '✓' : '1'}</div>
+          <div class="content">
+            <div class="title">Upload your timetable</div>
+            <div class="desc">${hasClasses ? `${CLASSES.length} classes imported.` : "Drop a PDF and we'll parse it automatically"}</div>
+          </div>
+          <div class="arrow">→</div>
+        </button>
+        <button class="step ${hasJobs ? 'done' : ''}" onclick="openEditModal('jobs')">
+          <div class="num">${hasJobs ? '✓' : '2'}</div>
+          <div class="content">
+            <div class="title">Add your jobs</div>
+            <div class="desc">${hasJobs ? `${state.jobs.length} job${state.jobs.length !== 1 ? 's' : ''} set up.` : 'Work schedule with hours, days, and salary'}</div>
+          </div>
+          <div class="arrow">→</div>
+        </button>
+        <button class="step ${hasGoogle ? 'done' : ''}" onclick="${hasGoogle ? 'fetchLiveData()' : 'connectGoogle()'}">
+          <div class="num">${hasGoogle ? '✓' : '3'}</div>
+          <div class="content">
+            <div class="title">Connect Google</div>
+            <div class="desc">${hasGoogle ? `Connected as ${currentUserId.split('@')[0]}` : 'Pull in your Gmail inbox and calendar'}</div>
+          </div>
+          <div class="arrow">→</div>
+        </button>
+        <button class="step ${hasFinances ? 'done' : ''}" onclick="openEditModal('incomes')">
+          <div class="num">${hasFinances ? '✓' : '4'}</div>
+          <div class="content">
+            <div class="title">Set up finances</div>
+            <div class="desc">${hasFinances ? 'Income and expenses configured.' : 'Add income sources and expense categories'}</div>
+          </div>
+          <div class="arrow">→</div>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   OVERVIEW
+   ============================================================ */
+function renderOverview() {
+  const totalFree = ALL_DATES.reduce((s, d) => s + freeHours(d), 0);
+  const totalJob = ALL_DATES.reduce((s, d) => s + jobHours(d), 0);
+  const totalUni = ALL_DATES.reduce((s, d) => s + attendedHours(d), 0);
+  const totalSkip = schedule.skipped.length;
+  const timeSplit = [
+    { name:'Free time', amount: totalFree, color:'#86ab7a' },
+    { name:'Work', amount: totalJob, color:'#e09a4e' },
+    { name:'Sleep', amount: 8 * ALL_DATES.length, color:'#7ca5c4' },
+    { name:'Uni', amount: totalUni, color:'#d4745e' }
+  ];
+  const todoTotal = state.todos.length;
+  const todoDone = state.todos.filter(t => isTodoFullyDone(t)).length;
+  const todoPct = todoTotal ? (todoDone / todoTotal) * 100 : 0;
+  const totalHours = 24 * ALL_DATES.length;
+  const emails = getEmails();
+
+  const html = `
+    ${renderWelcome()}
+    <div class="grid g-4 stagger" style="margin-bottom: 20px">
+      <div class="card stat-card">
+        <h2><span class="live-dot"></span>Free time</h2>
+        <div class="stat sage"><span data-countup="${totalFree}" data-decimal="true">0h</span></div>
+        <div class="stat-label">${hFmt(totalFree / ALL_DATES.length)} avg / day</div>
+        <div class="spark"><div class="fill sage" style="width:${(totalFree / totalHours) * 100}%"></div></div>
+      </div>
+      <div class="card stat-card">
+        <h2>Job hours</h2>
+        <div class="stat amber"><span data-countup="${totalJob}" data-decimal="true">0h</span></div>
+        <div class="stat-label">${state.jobs.length ? state.jobs.length + ' job' + (state.jobs.length !== 1 ? 's' : '') : 'No jobs added'}</div>
+        <div class="spark"><div class="fill amber" style="width:${(totalJob / totalHours) * 100}%"></div></div>
+      </div>
+      <div class="card stat-card">
+        <h2>Uni attended</h2>
+        <div class="stat coral"><span data-countup="${totalUni}" data-decimal="true">0h</span></div>
+        <div class="stat-label">${schedule.attended.length} sessions</div>
+        <div class="spark"><div class="fill coral" style="width:${(totalUni / totalHours) * 100}%"></div></div>
+      </div>
+      <div class="card stat-card">
+        <h2>Uni skipped</h2>
+        <div class="stat coral"><span data-countup="${totalSkip}">0</span></div>
+        <div class="stat-label">${hFmt(schedule.skipped.reduce((s, r) => s + r.hoursMissed, 0))} missed</div>
+        <div class="spark"><div class="fill coral" style="width:${CLASSES.length ? (totalSkip / CLASSES.length) * 100 : 0}%"></div></div>
+      </div>
+    </div>
+    <h2 class="section-title">Insights</h2>
+    <div class="card" style="margin-bottom: 20px">${renderInsights()}</div>
+    <h2 class="section-title">Calendar</h2>
+    <div style="margin-bottom: 20px">${renderCalendarBlock('all')}</div>
+    <h2 class="section-title">Inbox & Tasks</h2>
+    <div class="grid g-2 stagger" style="margin-bottom: 20px">
+      <div class="card">
+        <div class="row between" style="margin-bottom: 14px">
+          <h2 style="margin: 0">University inbox</h2>
+          <span class="pill sky">${emails.filter(e => e.unread).length} unread</span>
+        </div>
+        ${renderEmailFilter()}
+        <div class="email-list">${renderEmails()}</div>
+      </div>
+      <div class="card">
+        <div class="row between" style="margin-bottom: 14px">
+          <h2 style="margin: 0">To-do list</h2>
+          <span class="pill plum">${state.todos.filter(t => !isTodoFullyDone(t)).length} active</span>
+        </div>
+        ${renderQuickAdd()}
+        <div class="todo-list">${renderTodos()}</div>
+      </div>
+    </div>
+    <h2 class="section-title">Time balance</h2>
+    <div class="grid g-2 stagger">
+      <div class="card">
+        <h2>Where your hours go</h2>
+        <div class="donut-wrap">
+          ${donutChart(timeSplit, 'lg', { centerText: totalHours + 'h', subText: ALL_DATES.length + ' days', thickness: 5.5 })}
+          <div class="donut-legend">
+            ${timeSplit.map(t => `<div class="legend-item"><div class="legend-swatch" style="background:${t.color}"></div><div class="name">${t.name}</div><div class="value">${hFmt(t.amount)} · ${Math.round((t.amount / totalHours) * 100)}%</div></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Task progress</h2>
+        <div class="donut-wrap">
+          ${progressRing(todoPct, '#b08aba', 'lg', Math.round(todoPct) + '%')}
+          <div style="flex: 1; min-width: 160px;">
+            <div style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em;">${todoDone} of ${todoTotal}</div>
+            <div style="color: var(--muted); font-size: 12px; margin-top: 4px;">tasks completed</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('view-overview').innerHTML = html;
+}
+
+/* ============================================================
+   EMAILS
+   ============================================================ */
+function renderEmailFilter() {
+  return `<div class="email-filters">${['all','unread','important'].map(f => `<button class="email-filter ${state.emailFilter === f ? 'active' : ''}" onclick="setEmailFilter('${f}')">${f[0].toUpperCase() + f.slice(1)}</button>`).join('')}</div>`;
+}
+function renderEmails() {
+  let list = getEmails();
+  if (state.emailFilter === 'unread') list = list.filter(e => e.unread);
+  if (state.emailFilter === 'important') list = list.filter(e => e.important);
+  if (!currentUserId) {
+    return `<div style="padding: 24px 12px; text-align: center;">
+      <div style="font-size: 28px; opacity: 0.5; margin-bottom: 10px;">📬</div>
+      <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">Your inbox is empty</div>
+      <div style="font-size: 12px; color: var(--muted); margin-bottom: 14px;">Connect your Google account to pull in emails.</div>
+      <button class="btn amber small" onclick="connectGoogle()">Connect Google</button>
+    </div>`;
+  }
+  if (!list.length) return '<div class="empty">No emails in this filter.</div>';
+  return list.map(e => {
+    const expanded = state.expandedEmail === e.id;
+    return `
+      <div class="email-item ${e.unread ? 'unread' : ''} ${expanded ? 'expanded' : ''}" onclick="toggleEmail('${e.id}')">
+        <div class="email-head"><div class="email-from">${esc(e.from)}</div><div class="email-time">${esc(e.time)}</div></div>
+        <div class="email-subject">${esc(e.subject)}</div>
+        <div class="email-preview">${esc(e.preview)}</div>
+        ${(e.important || e.unread) ? `<div class="email-tags">${e.important ? '<span class="pill coral">Important</span>' : ''}${e.unread ? '<span class="pill sky">Unread</span>' : ''}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+function setEmailFilter(f) { state.emailFilter = f; renderAll(); }
+function toggleEmail(id) {
+  state.expandedEmail = state.expandedEmail === id ? null : id;
+  if (liveEmails) { const e = liveEmails.find(x => x.id === id); if (e) e.unread = false; }
+  renderAll();
+}
+
+/* ============================================================
+   TODOS
+   ============================================================ */
+function renderQuickAdd() {
+  return `
+    <div class="quick-add">
+      <input class="input" id="qa-title" placeholder="Add a task..." onkeydown="if(event.key==='Enter')quickAdd()" />
+      <input class="input" id="qa-hours" type="number" min="0.5" step="0.5" value="1" />
+      <select class="select" id="qa-priority"><option value="high">High</option><option value="med" selected>Medium</option><option value="low">Low</option></select>
+      <select class="select" id="qa-recurrence"><option value="once" selected>Once</option><option value="daily">Daily</option><option value="every-2-days">Every 2 days</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select>
+      <button class="btn amber" onclick="quickAdd()">Add</button>
+    </div>
+  `;
+}
+function quickAdd() {
+  const title = document.getElementById('qa-title').value.trim();
+  const hours = parseFloat(document.getElementById('qa-hours').value) || 1;
+  const priority = document.getElementById('qa-priority').value;
+  const recurrence = document.getElementById('qa-recurrence').value;
+  if (!title) return;
+  state.todos.push({ id: 'td' + Date.now(), title, hours, priority, recurrence, startDate: ALL_DATES[0], completed: false, completedDates: [], scheduledOnCalendar: true });
+  renderAll();
+}
+function renderTodos() {
+  if (!state.todos.length) return '<div class="empty">No tasks yet. Add one above to get started.</div>';
+  const sorted = [...state.todos].sort((a, b) => {
+    const aDone = isTodoFullyDone(a), bDone = isTodoFullyDone(b);
+    if (aDone !== bDone) return aDone ? 1 : -1;
+    const order = { high: 0, med: 1, low: 2 };
+    return order[a.priority] - order[b.priority];
+  });
+  return sorted.map(t => renderTodoItem(t)).join('');
+}
+function isTodoFullyDone(todo) {
+  if (todo.recurrence === 'once') return todo.completed;
+  const total = ALL_DATES.filter(d => todoOccursOn(todo, d)).length;
+  return total > 0 && todo.completedDates.length >= total;
+}
+function renderTodoItem(todo) {
+  const isRecur = todo.recurrence !== 'once';
+  const nextPending = isRecur ? getNextPendingDate(todo) : null;
+  const nextInstance = nextPending ? todoInstances.find(i => i.todoId === todo.id && i.date === nextPending) : todoInstances.find(i => i.todoId === todo.id);
+  const fullyDone = isTodoFullyDone(todo);
+  const scheduled = todo.scheduledOnCalendar !== false;
+
+  let sugHtml = '';
+  if (fullyDone) sugHtml = '';
+  else if (nextInstance) {
+    sugHtml = `
+      <div class="todo-suggestion">
+        <label>
+          <input type="checkbox" ${scheduled ? 'checked' : ''} onchange="toggleTodoSchedule('${todo.id}', this.checked)" />
+          <span>${scheduled ? 'Scheduled' : 'Not scheduled'} · ${dowShort(nextInstance.date)} ${fmtDate(nextInstance.date)}, ${fmtRange(nextInstance.start, nextInstance.end)}</span>
+        </label>
+      </div>`;
+  }
+  else if (!isRecur && todo.completed) sugHtml = '';
+  else sugHtml = `<div class="todo-suggestion no-slot">No free slot found</div>`;
+
+  let progressHtml = '';
+  if (isRecur) {
+    const total = ALL_DATES.filter(d => todoOccursOn(todo, d)).length;
+    const done = todo.completedDates.length;
+    progressHtml = `<span style="font-weight:600">${done}/${total} done</span>`;
+  }
+  const recurChip = isRecur ? `<span class="pill ${todo.priority}">${recurrenceLabel(todo.recurrence)}</span>` : '';
+  return `
+    <div class="todo-item ${fullyDone ? 'done' : ''}">
+      <button class="todo-check ${fullyDone ? 'checked' : ''}" onclick="toggleTodo('${todo.id}')">✓</button>
+      <div class="todo-body">
+        <div class="todo-title">${esc(todo.title)}</div>
+        <div class="todo-meta"><span>${hFmt(todo.hours)}</span>${recurChip}${progressHtml}</div>
+        ${sugHtml}
+      </div>
+      <button class="todo-delete" onclick="deleteTodo('${todo.id}')">✕</button>
+    </div>
+  `;
+}
+function getNextPendingDate(todo) {
+  for (const date of ALL_DATES) {
+    if (!todoOccursOn(todo, date)) continue;
+    if (todo.completedDates.includes(date)) continue;
+    return date;
+  }
+  return null;
+}
+function toggleTodo(id) {
+  const todo = state.todos.find(t => t.id === id);
+  if (!todo) return;
+  if (todo.recurrence === 'once') todo.completed = !todo.completed;
+  else {
+    const next = getNextPendingDate(todo);
+    if (next) todo.completedDates.push(next);
+    else todo.completedDates = [];
+  }
+  renderAll();
+}
+/* NEW: toggle whether a todo shows in the calendar */
+function toggleTodoSchedule(id, checked) {
+  const todo = state.todos.find(t => t.id === id);
+  if (!todo) return;
+  todo.scheduledOnCalendar = checked;
+  renderAll();
+}
+function deleteTodo(id) { state.todos = state.todos.filter(t => t.id !== id); renderAll(); }
+
+/* ============================================================
+   UNI VIEW
+   ============================================================ */
+function renderUni() {
+  const totalAttend = schedule.attended.length;
+  const totalSkip = schedule.skipped.length;
+  const hoursAttended = schedule.attended.reduce((s, r) => s + (r.end - r.start), 0);
+  const hoursMissed = schedule.skipped.reduce((s, r) => s + r.hoursMissed, 0);
+  const pending = schedule.skipped.filter(s => s.status === 'pending').length;
+  const resolved = totalSkip - pending;
+  const pct = totalSkip ? Math.round(resolved / totalSkip * 100) : 0;
+
+  if (!CLASSES.length) {
+    document.getElementById('view-uni').innerHTML = `
+      <div class="card" style="text-align: center; padding: 60px 24px;">
+        <div style="font-size: 40px; opacity: 0.5; margin-bottom: 16px;">🎓</div>
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 8px;">No timetable yet</div>
+        <div style="color: var(--muted); font-size: 13px; max-width: 400px; margin: 0 auto 20px;">Upload your university timetable PDF and I'll parse the classes, times, and locations.</div>
+        <button class="btn sage" onclick="openUploadModal()">📄 Upload timetable PDF</button>
+      </div>`;
+    return;
+  }
+
+  const perType = {};
+  schedule.rows.forEach(r => {
+    const t = r.type || 'Class';
+    if (!perType[t]) perType[t] = { total: 0, skipped: 0 };
+    perType[t].total++;
+    if (r.skipped) perType[t].skipped++;
+  });
+  const maxType = Math.max(1, ...Object.values(perType).map(v => v.skipped));
+  const barRows = Object.entries(perType).map(([name, v]) => {
+    const width = (v.skipped / maxType) * 100;
+    const grad = v.skipped === 0 ? 'linear-gradient(90deg, #86ab7a, #a3c497)' : v.skipped >= maxType ? 'linear-gradient(90deg, #d4745e, #e09070)' : 'linear-gradient(90deg, #e09a4e, #eab873)';
+    return `<div class="bar-row"><div class="bar-label">${esc(name)}</div><div class="bar-track"><div class="bar-fill" style="width:${width}%;background:${grad}">${v.skipped > 0 ? v.skipped : ''}</div></div><div class="bar-val">${v.skipped}/${v.total}</div></div>`;
+  }).join('');
+
+  const heat = ALL_DATES.map(date => {
+    const n = schedule.skipped.filter(s => s.date === date).length;
+    const cls = n === 0 ? 'zero' : n >= 2 ? 'high' : 'low';
+    return `<div class="heat-day ${cls}"><div class="d">${fmtDate(date)}</div><div class="n">${n}</div></div>`;
+  }).join('');
+
+  const skippedLog = schedule.skipped.slice().sort((a, b) => a.date.localeCompare(b.date) || a.start - b.start).map(s => `
+    <div class="skip-item">
+      <div class="row between wrap" style="align-items: flex-start">
+        <div style="flex: 1">
+          <div class="name">${esc(s.className)}</div>
+          <div class="meta">${fmtDateLong(s.date)} · ${fmtRange(s.start, s.end)} · ${esc(s.floor || '')} ${esc(s.room || '')}</div>
+        </div>
+        <span class="pill coral">skip</span>
+      </div>
+      ${s.topic ? `<div class="topic"><strong>Missed:</strong> ${esc(s.topic)}</div>` : ''}
+      <button class="status-btn ${s.status === 'done' ? 'done' : ''}" onclick="toggleCatchup('${s.id}')">${s.status === 'done' ? '✓ Caught up' : 'Mark as caught up'}</button>
+    </div>
+  `).join('');
+
+  const attendanceSplit = [
+    { name:'Attended', amount: totalAttend, color:'#86ab7a' },
+    { name:'Skipped', amount: totalSkip, color:'#d4745e' }
+  ];
+
+  const uniInsights = [];
+  if (pending >= 2) uniInsights.push({ pri: 0, importance:'critical', type:'bad', icon:'⚠️', html:`<strong>${pending} skipped sessions</strong> still need catch-up.` });
+  else if (pending === 1) uniInsights.push({ pri: 1, importance:'important', type:'warn', icon:'📘', html:`<strong>1 session</strong> left to catch up on.` });
+  else uniInsights.push({ pri: 2, importance:'normal', type:'good', icon:'✅', html:`All skipped sessions have been caught up.` });
+  uniInsights.push({ pri: 2, importance:'normal', type:'good', icon:'🎯', html:`Attendance rate: <strong>${Math.round((totalAttend / CLASSES.length) * 100)}%</strong>.` });
+  uniInsights.sort((a, b) => a.pri - b.pri);
+
+  document.getElementById('view-uni').innerHTML = `
+    <div class="grid g-4 stagger" style="margin-bottom: 20px">
+      <div class="card stat-card">
+        <h2>Attending</h2>
+        <div class="stat sage"><span data-countup="${totalAttend}">0</span></div>
+        <div class="stat-label">${hFmt(hoursAttended)} of lectures</div>
+        <div class="spark"><div class="fill sage" style="width:${(totalAttend / CLASSES.length) * 100}%"></div></div>
+      </div>
+      <div class="card stat-card">
+        <h2>Skipping</h2>
+        <div class="stat coral"><span data-countup="${totalSkip}">0</span></div>
+        <div class="stat-label">${hFmt(hoursMissed)} missed</div>
+        <div class="spark"><div class="fill coral" style="width:${(totalSkip / CLASSES.length) * 100}%"></div></div>
+      </div>
+      <div class="card stat-card">
+        <h2>Catch-up</h2>
+        <div class="stat plum">${resolved}/${totalSkip}</div>
+        <div class="stat-label">${pct}% resolved</div>
+        <div class="spark"><div class="fill plum" style="width:${pct}%"></div></div>
+      </div>
+      <div class="card stat-card">
+        <h2>Total classes</h2>
+        <div class="stat"><span data-countup="${CLASSES.length}">0</span></div>
+        <div class="stat-label">in current schedule</div>
+      </div>
+    </div>
+    <h2 class="section-title">Insights</h2>
+    <div class="card" style="margin-bottom: 20px">
+      ${uniInsights.map(i => `<div class="insight ${i.type}"><span class="icon">${i.icon}</span><span style="flex: 1;">${i.html}</span><span class="priority ${i.importance}">${i.importance}</span></div>`).join('')}
+    </div>
+    <h2 class="section-title">Calendar</h2>
+    <div style="margin-bottom: 20px">${renderCalendarBlock('uni')}</div>
+    <h2 class="section-title">Analytics</h2>
+    <div class="grid g-2 stagger" style="margin-bottom: 20px">
+      <div class="card"><h2>Skipped by session type</h2>${barRows || '<div class="empty">No data.</div>'}</div>
+      <div class="card"><h2>Skipped by date</h2><div class="heatmap">${heat}</div></div>
+    </div>
+    <div class="grid g-2 stagger" style="margin-bottom: 20px">
+      <div class="card">
+        <h2 class="uni">Attendance breakdown</h2>
+        <div class="donut-wrap">
+          ${donutChart(attendanceSplit, 'md', { centerText: totalAttend + '/' + (totalAttend + totalSkip), subText: 'sessions', thickness: 5 })}
+          <div class="donut-legend">
+            ${attendanceSplit.map(t => `<div class="legend-item"><div class="legend-swatch" style="background:${t.color}"></div><div class="name">${t.name}</div><div class="value">${t.amount}</div></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Catch-up progress</h2>
+        <div class="donut-wrap">
+          ${progressRing(pct, '#b08aba', 'md', pct + '%')}
+          <div><div style="font-size: 20px; font-weight: 700;">${resolved} of ${totalSkip}</div><div style="color: var(--muted); font-size: 12px; margin-top: 4px;">sessions caught up</div></div>
+        </div>
+      </div>
+    </div>
+    <h2 class="section-title">Skipped log</h2>
+    <div class="card">${skippedLog || '<div class="empty">No skipped sessions.</div>'}</div>
+  `;
+}
+function toggleCatchup(skipId) {
+  const skip = schedule.skipped.find(s => s.id === skipId);
+  if (!skip) return;
+  state.catchupStatus[skipId] = skip.status === 'done' ? 'pending' : 'done';
+  renderAll();
+}
+
+/* ============================================================
+   JOB VIEW
+   ============================================================ */
+function renderJob() {
+  const jobs = state.jobs;
+  const totalTime = 24 * ALL_DATES.length;
+  const totalSleep = 8 * ALL_DATES.length;
+  const totalWork = ALL_DATES.reduce((s, d) => s + jobHours(d), 0);
+  const totalUniT = ALL_DATES.reduce((s, d) => s + attendedHours(d), 0);
+  const totalFreeT = totalTime - totalSleep - totalWork - totalUniT;
+  const totalEarnings = totalEarningsInPeriod();
+  const weeklyH = totalWeeklyHours();
+  const workDaysCount = ALL_DATES.filter(isWorkDay).length;
+  const monthlySalary = jobs.reduce((s, j) => s + (j.salary || 0), 0);
+
+  if (!jobs.length) {
+    document.getElementById('view-job').innerHTML = `
+      <div class="card" style="text-align: center; padding: 60px 24px;">
+        <div style="font-size: 40px; opacity: 0.5; margin-bottom: 16px;">💼</div>
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 8px;">No jobs added yet</div>
+        <div style="color: var(--muted); font-size: 13px; max-width: 420px; margin: 0 auto 20px;">Add your jobs to see how they fit around your classes. Set your hours, days, and monthly salary — it'll automatically appear as income in Finances.</div>
+        <button class="btn amber" onclick="openEditModal('jobs')">+ Add your first job</button>
+      </div>`;
+    return;
+  }
+
+  const jobRows = jobs.map(j => {
+    const hours = j.end - j.start;
+    const weekly = j.days.length * hours;
+    const dayChips = [1,2,3,4,5,6,0].map(d => `<div class="job-day ${j.days.includes(d) ? 'on' : ''}">${dayLetter(d)}</div>`).join('');
+    const earnings = j.salary ? `Rs. ${j.salary}/mo` : (j.rate ? `Rs. ${j.rate}/h` : '');
+    return `
+      <div class="job-row">
+        <div class="job-color" style="background:${j.color}"></div>
+        <div class="job-info">
+          <div class="name">${esc(j.name)}</div>
+          <div class="meta">
+            <span>${fmtRange(j.start, j.end)}</span>
+            <span class="sep">·</span>
+            <span>${hFmt(hours)} per shift</span>
+          </div>
+          <div class="job-days">${dayChips}</div>
+        </div>
+        <div>
+          <div class="job-hours-big">${hFmt(weekly)}<span class="unit">/wk</span></div>
+          ${earnings ? `<div class="job-rate">${earnings}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const upcomingHolidays = state.holidays.filter(h => daysAway(h) >= -1).sort().slice(0, 5);
+  const holidayRows = upcomingHolidays.length ? upcomingHolidays.map(h => {
+    const away = daysAway(h);
+    const label = away === 0 ? 'Today' : away === 1 ? 'Tomorrow' : `In ${away} days`;
+    const soon = away >= 0 && away <= 3;
+    return `<div class="holiday-row"><div><div class="date">${fmtDateFull(h)}</div><div class="dow">Day off</div></div><div class="days-away ${soon ? 'soon' : ''}">${label}</div><div></div></div>`;
+  }).join('') : '';
+
+  const timeSplit = [
+    { name:'Free time', amount: totalFreeT, color:'#86ab7a' },
+    { name:'Work', amount: totalWork, color:'#e09a4e' },
+    { name:'Sleep', amount: totalSleep, color:'#7ca5c4' },
+    { name:'Uni', amount: totalUniT, color:'#d4745e' }
+  ];
+
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  const jobInsights = [];
+  if (jobs.length === 1) jobInsights.push({ pri: 2, importance:'normal', type:'good', icon:'💼', html:`Working <strong>${hFmt(weeklyH)}/week</strong> across ${workDaysCount} days.` });
+  else jobInsights.push({ pri: 2, importance:'normal', type:'good', icon:'💼', html:`<strong>${jobs.length} jobs</strong> totalling ${hFmt(weeklyH)}/week.` });
+  if (monthlySalary > 0) jobInsights.push({ pri: 2, importance:'normal', type:'good', icon:'💰', html:`Total monthly salary: <strong>${money(monthlySalary)}</strong> — auto-added to your Finances income.` });
+  if (upcomingHolidays.length) {
+    const away = daysAway(upcomingHolidays[0]);
+    jobInsights.push({ pri: 2, importance:'normal', type:'good', icon:'🏖️', html:`Next holiday: <strong>${fmtDateFull(upcomingHolidays[0])}</strong>${away === 0 ? ' (today)' : away > 0 ? ` — ${away} day${away !== 1 ? 's' : ''} away` : ''}.` });
+  }
+  jobInsights.sort((a, b) => a.pri - b.pri);
+
+  document.getElementById('view-job').innerHTML = `
+    <div class="grid g-4 stagger" style="margin-bottom: 20px">
+      <div class="card stat-card">
+        <h2 class="job">Jobs</h2>
+        <div class="stat amber"><span data-countup="${jobs.length}">0</span></div>
+        <div class="stat-label">active</div>
+      </div>
+      <div class="card stat-card">
+        <h2>Weekly hours</h2>
+        <div class="stat amber"><span data-countup="${weeklyH}" data-decimal="true">0h</span></div>
+        <div class="stat-label">across ${workDaysCount} shifts</div>
+        <div class="spark"><div class="fill amber" style="width:${Math.min((weeklyH / 40) * 100, 100)}%"></div></div>
+      </div>
+      <div class="card stat-card">
+        <h2>Monthly salary</h2>
+        <div class="stat sage"><span data-countup="${monthlySalary}" data-money="true">Rs. 0</span></div>
+        <div class="stat-label">total from all jobs</div>
+      </div>
+      <div class="card stat-card">
+        <h2>Holidays</h2>
+        <div class="stat plum"><span data-countup="${state.holidays.length}">0</span></div>
+        <div class="stat-label">day${state.holidays.length !== 1 ? 's' : ''} off</div>
+      </div>
+    </div>
+    <h2 class="section-title">Insights</h2>
+    <div class="card" style="margin-bottom: 20px">
+      ${jobInsights.map(i => `<div class="insight ${i.type}"><span class="icon">${i.icon}</span><span style="flex: 1;">${i.html}</span><span class="priority ${i.importance}">${i.importance}</span></div>`).join('')}
+    </div>
+    <h2 class="section-title">Your jobs</h2>
+    <div class="card" style="margin-bottom: 20px">
+      <div class="row between" style="margin-bottom: 14px">
+        <h2 style="margin: 0;" class="job">Current schedule</h2>
+        <button class="edit-pencil" onclick="openEditModal('jobs')" title="Edit jobs">✎</button>
+      </div>
+      ${jobRows}
+    </div>
+    <h2 class="section-title">Holidays</h2>
+    <div class="card" style="margin-bottom: 20px">
+      <div class="row between" style="margin-bottom: 14px">
+        <h2 style="margin: 0;" class="job">Days off</h2>
+        <button class="edit-pencil" onclick="openEditModal('holidays')" title="Edit holidays">✎</button>
+      </div>
+      ${holidayRows || '<div class="empty">No upcoming holidays.</div>'}
+    </div>
+    <h2 class="section-title">Analytics</h2>
+    <div class="grid g-2 stagger">
+      <div class="card">
+        <h2>Time split</h2>
+        <div class="donut-wrap">
+          ${donutChart(timeSplit, 'lg', { centerText: totalTime + 'h', subText: ALL_DATES.length + ' days', thickness: 5.5 })}
+          <div class="donut-legend">
+            ${timeSplit.map(t => `<div class="legend-item"><div class="legend-swatch" style="background:${t.color}"></div><div class="name">${t.name}</div><div class="value">${hFmt(t.amount)} · ${Math.round((t.amount / totalTime) * 100)}%</div></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Hours worked per weekday</h2>
+        ${days.map((d, i) => {
+          const jsDay = (i + 1) % 7;
+          const dayJobs = jobs.filter(j => j.days.includes(jsDay));
+          const hours = dayJobs.reduce((s, j) => s + (j.end - j.start), 0);
+          const width = hours ? Math.min((hours / 12) * 100, 100) : 0;
+          return `<div class="bar-row"><div class="bar-label">${d}${!hours ? ' <span style="color:var(--muted);font-size:10px">OFF</span>' : ''}</div><div class="bar-track"><div class="bar-fill" style="width:${width}%;background:${hours ? 'linear-gradient(90deg, #e09a4e, #eab873)' : 'transparent'}">${hours ? hFmt(hours) : ''}</div></div><div class="bar-val">${hours ? hFmt(hours) : '—'}</div></div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+   FINANCE VIEW
+   ============================================================ */
+function renderFinance() {
+  const allIncomes = getAllIncomes();
+  const allExpenses = getAllExpenses();
+  const totalIncome = allIncomes.reduce((s, x) => s + x.amount, 0);
+  const totalExpenses = allExpenses.reduce((s, x) => s + x.amount, 0);
+  const net = totalIncome - totalExpenses;
+  const savingsRate = totalIncome > 0 ? Math.round((net / totalIncome) * 100) : 0;
+  const periodicTotal = state.periodic.reduce((s, x) => s + x.amount, 0);
+  const variableTotal = Math.max(totalExpenses - periodicTotal, 0);
+
+  const currentBalance = state.startingBalance + net;
+  /* FIX: projection no longer doubles the first month's salary */
+  // Since current balance already includes this month's net, projecting forward
+  // at the same rate would double count. Show current as projected.
+  const projectedEnd = currentBalance;
+  const growth = state.lastMonthBalance > 0 ? ((currentBalance - state.lastMonthBalance) / state.lastMonthBalance) * 100 : 0;
+  const growthClass = growth > 0 ? 'up' : growth < 0 ? 'down' : 'flat';
+  const growthArrow = growth > 0 ? '↑' : growth < 0 ? '↓' : '—';
+
+  const expenseDonut = allExpenses.map(x => ({ name: x.name, amount: x.amount, color: x.color }));
+  const incomeDonut = allIncomes.map(x => ({ name: x.name, amount: x.amount, color: x.color }));
+  const budgetCats = state.expenses.map(cat => {
+    const budget = Math.round(cat.amount * 1.15);
+    const pct = Math.min(100, (cat.amount / budget) * 100);
+    return { ...cat, budget, pct };
+  });
+
+  const aiInsights = generateFinanceInsights(totalIncome, totalExpenses, net, periodicTotal, currentBalance, projectedEnd, growth);
+
+  /* FIX: cap the recurring % at 100 */
+  const recurringPct = totalExpenses > 0 ? Math.min(Math.round((periodicTotal / totalExpenses) * 100), 100) : 0;
+
+  document.getElementById('view-finances').innerHTML = `
+    <div class="grid g-4 stagger" style="margin-bottom: 20px">
+      <div class="card stat-card">
+        <div class="row between" style="margin-bottom: 6px;">
+          <h2 style="margin: 0;">Current balance</h2>
+          <button class="edit-pencil" onclick="openEditModal('balance')">✎</button>
+        </div>
+        <div class="stat plum"><span data-countup="${currentBalance}" data-money="true">Rs. 0</span></div>
+        <div class="growth ${growthClass}">
+          <span>${growthArrow}</span>
+          <span data-countup="${growth}" data-percent="true">0%</span>
+          <span style="opacity: 0.7; font-weight: 500;">vs last month</span>
+        </div>
+      </div>
+      <div class="card stat-card">
+        <h2>Projected end of month</h2>
+        <div class="stat sage"><span data-countup="${projectedEnd}" data-money="true">Rs. 0</span></div>
+        <div class="stat-label">at current rate</div>
+        <div class="spark"><div class="fill sage" style="width:${currentBalance > 0 ? 100 : 0}%"></div></div>
+      </div>
+      <div class="card stat-card">
+        <h2>Income this month</h2>
+        <div class="stat sage"><span data-countup="${totalIncome}" data-money="true">Rs. 0</span></div>
+        <div class="stat-label">${allIncomes.length} source${allIncomes.length !== 1 ? 's' : ''}</div>
+        <div class="spark"><div class="fill sage" style="width:${totalIncome + totalExpenses ? (totalIncome / (totalIncome + totalExpenses)) * 100 : 0}%"></div></div>
+      </div>
+      <div class="card stat-card">
+        <h2>Expenses this month</h2>
+        <div class="stat coral"><span data-countup="${totalExpenses}" data-money="true">Rs. 0</span></div>
+        <div class="stat-label">${allExpenses.length} categor${allExpenses.length !== 1 ? 'ies' : 'y'}</div>
+        <div class="spark"><div class="fill coral" style="width:${totalIncome + totalExpenses ? (totalExpenses / (totalIncome + totalExpenses)) * 100 : 0}%"></div></div>
+      </div>
+    </div>
+
+    <h2 class="section-title">Insights</h2>
+    <div class="ai-panel" style="margin-bottom: 20px">
+      <div class="ai-head">AI financial advisor</div>
+      ${aiInsights.map(i => `<div class="ai-insight"><div class="emoji">${i.emoji}</div><div>${i.html}</div></div>`).join('')}
+    </div>
+
+    <h2 class="section-title">Money flow</h2>
+    <div class="grid g-2 stagger" style="margin-bottom: 20px">
+      <div class="card">
+        <div class="row between" style="margin-bottom: 14px;">
+          <h2 style="margin: 0;" class="fin">Where your money goes</h2>
+          <button class="edit-pencil" onclick="openEditModal('expenses')">✎</button>
+        </div>
+        ${allExpenses.length ? `
+          <div class="donut-wrap">
+            ${donutChart(expenseDonut, 'lg', { centerText: fmtCompact(totalExpenses), subText: 'spent', thickness: 5.5 })}
+            <div class="donut-legend">
+              ${allExpenses.map(c => `<div class="legend-item"><div class="legend-swatch" style="background:${c.color}"></div><div class="name">${c.isRecurring ? '🔄 ' : ''}${esc(c.name)}</div><div class="value">${money(c.amount)}</div></div>`).join('')}
+            </div>
+          </div>
+        ` : `
+          <div style="text-align: center; padding: 30px 12px;">
+            <div style="font-size: 32px; opacity: 0.5; margin-bottom: 12px;">💸</div>
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">No expense categories yet</div>
+            <div style="font-size: 12px; color: var(--muted); margin-bottom: 14px;">Add spending categories or recurring bills to track where your money goes.</div>
+            <button class="btn coral small" onclick="openEditModal('expenses')">Add expense</button>
+          </div>
+        `}
+      </div>
+      <div class="card">
+        <div class="row between" style="margin-bottom: 14px;">
+          <h2 style="margin: 0;">Where your money comes from</h2>
+          <button class="edit-pencil" onclick="openEditModal('incomes')">✎</button>
+        </div>
+        ${allIncomes.length ? `
+          <div class="donut-wrap">
+            ${donutChart(incomeDonut, 'lg', { centerText: fmtCompact(totalIncome), subText: 'earned', thickness: 5.5 })}
+            <div class="donut-legend">
+              ${allIncomes.map(c => `<div class="legend-item"><div class="legend-swatch" style="background:${c.color}"></div><div class="name">${c.fromJob ? '💼 ' : ''}${esc(c.name)}</div><div class="value">${money(c.amount)}</div></div>`).join('')}
+            </div>
+          </div>
+        ` : `
+          <div style="text-align: center; padding: 30px 12px;">
+            <div style="font-size: 32px; opacity: 0.5; margin-bottom: 12px;">💰</div>
+            <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">No income sources yet</div>
+            <div style="font-size: 12px; color: var(--muted); margin-bottom: 14px;">Add a job with a salary, or add income sources manually.</div>
+            <button class="btn sage small" onclick="openEditModal('incomes')">Add income source</button>
+          </div>
+        `}
+      </div>
+    </div>
+
+    ${budgetCats.length ? `
+    <h2 class="section-title">Budget by category</h2>
+    <div class="card" style="margin-bottom: 20px">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px;">
+        ${budgetCats.map(c => `
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px; padding:16px 8px; background:var(--bg-2); border:1px solid var(--border); border-radius:12px;">
+            ${progressRing(c.pct, c.color, 'sm', Math.round(c.pct) + '%')}
+            <div style="font-size:11.5px; font-weight:600; color:var(--text-dim); text-align:center;">${c.icon} ${c.name}</div>
+            <div style="font-size:10px; color:var(--muted); text-align:center;">${money(c.amount)} / ${money(c.budget)}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+    ` : ''}
+
+    <h2 class="section-title">Periodic expenses</h2>
+    <div class="grid g-1-2 stagger" style="margin-bottom: 20px">
+      <div class="card">
+        <div class="row between" style="margin-bottom: 14px;">
+          <h2 style="margin: 0;" class="fin">Monthly recurring</h2>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            ${state.periodic.length ? `<span class="pill coral">${money(periodicTotal)} / month</span>` : ''}
+            <button class="edit-pencil" onclick="openEditModal('periodic')">✎</button>
+          </div>
+        </div>
+        <div class="periodic-list">
+          ${state.periodic.length ? state.periodic.map(p => {
+            const today = new Date().getDate();
+            const soon = p.day - today <= 3 && p.day >= today;
+            const goal = p.goalId ? state.goals.find(g => g.id === p.goalId) : null;
+            return `
+              <div class="periodic-item">
+                <div>
+                  <div class="name">${esc(p.name)}</div>
+                  <div class="cat">${esc(p.cat)} · ${p.frequency}${goal ? ` · saving to ${esc(goal.name)}` : ''}</div>
+                </div>
+                <div class="amount">${money(p.amount)}</div>
+                <div class="due ${soon ? 'soon' : ''}">${soon ? 'Due soon' : 'Day ' + p.day}</div>
+              </div>`;
+          }).join('') : `
+            <div style="text-align: center; padding: 24px 12px;">
+              <div style="font-size: 28px; opacity: 0.5; margin-bottom: 10px;">🔄</div>
+              <div style="font-size: 12.5px; color: var(--muted); margin-bottom: 12px;">No recurring expenses yet.</div>
+              <button class="btn amber small" onclick="openEditModal('periodic')">Add recurring</button>
+            </div>
+          `}
+        </div>
+      </div>
+      <div class="card">
+        <h2 class="fin">Recurring vs variable</h2>
+        ${totalExpenses > 0 ? `
+          <div class="donut-wrap">
+            ${donutChart([
+              { name: 'Recurring', amount: periodicTotal, color: '#d4745e' },
+              { name: 'Variable', amount: variableTotal, color: '#e09a4e' }
+            ], 'md', { centerText: recurringPct + '%', subText: 'recurring', thickness: 5 })}
+            <div class="donut-legend">
+              <div class="legend-item"><div class="legend-swatch" style="background:#d4745e"></div><div class="name">Recurring</div><div class="value">${money(periodicTotal)}</div></div>
+              <div class="legend-item"><div class="legend-swatch" style="background:#e09a4e"></div><div class="name">Variable</div><div class="value">${money(variableTotal)}</div></div>
+            </div>
+          </div>
+        ` : `<div class="empty" style="padding: 40px 0;">Add expense categories to see the split</div>`}
+      </div>
+    </div>
+
+    <h2 class="section-title">Savings goals</h2>
+    <div class="card" style="margin-bottom: 20px">
+      <div class="row between" style="margin-bottom: 14px;">
+        <h2 style="margin: 0;" class="fin">Your goals</h2>
+        <button class="edit-pencil" onclick="openEditModal('goals')">✎</button>
+      </div>
+      ${state.goals.length ? state.goals.map(g => {
+        const pct = Math.round((g.saved / g.target) * 100);
+        const monthly = state.periodic.filter(p => p.goalId === g.id).reduce((s, p) => s + (p.goalAmount || 0), 0);
+        return `
+          <div class="goal-row">
+            <div class="goal-progress" style="--pct: ${Math.min(pct, 100)}%"><span class="pct">${pct}%</span></div>
+            <div class="goal-info">
+              <div class="name">${esc(g.name)}</div>
+              <div class="meta">${money(g.saved)} of ${money(g.target)}${monthly ? ` · +${money(monthly)}/mo` : ''}</div>
+            </div>
+            <button class="btn ghost icon" onclick="removeGoalDirect('${g.id}')">✕</button>
+          </div>`;
+      }).join('') : `
+        <div style="text-align: center; padding: 24px 12px;">
+          <div style="font-size: 28px; opacity: 0.5; margin-bottom: 10px;">🎯</div>
+          <div style="font-size: 12.5px; color: var(--muted); margin-bottom: 12px;">No savings goals yet.</div>
+          <button class="btn plum small" onclick="openEditModal('goals')">Add savings goal</button>
+        </div>
+      `}
+    </div>
+
+    ${TRANSACTIONS.length ? `
+    <h2 class="section-title">Recent transactions</h2>
+    <div class="card">
+      <div class="txn-list">
+        ${TRANSACTIONS.map(t => {
+          const isIncome = t.amount > 0;
+          return `<div class="txn-item"><div class="txn-icon">${t.icon}</div><div class="txn-info"><div class="txn-desc">${esc(t.desc)}</div><div class="txn-meta"><span>${esc(t.cat)}</span><span>·</span><span>${esc(t.date)}</span></div></div><div class="txn-amount ${isIncome ? 'pos' : 'neg'}">${money(t.amount)}</div></div>`;
+        }).join('')}
+      </div>
+    </div>
+    ` : ''}
+  `;
+}
+
+function removeGoalDirect(id) {
+  state.goals = state.goals.filter(g => g.id !== id);
+  renderAll();
+}
+
+function generateFinanceInsights(income, expenses, net, periodicTotal, currentBalance, projectedEnd, growth) {
+  const insights = [];
+  if (!income && !expenses && !state.periodic.length && !state.goals.length) {
+    insights.push({ emoji: '👋', html: `<strong>Welcome to your finances.</strong> Click the pencil on either money flow card to add income and expenses.` });
+    return insights;
+  }
+  const savingsRate = income > 0 ? Math.round((net / income) * 100) : 0;
+  if (state.lastMonthBalance > 0) {
+    if (growth > 5) insights.push({ emoji: '📈', html: `<strong>Your balance is up ${growth.toFixed(1)}%</strong> compared to last month.` });
+    else if (growth > 0) insights.push({ emoji: '📈', html: `<strong>Balance up ${growth.toFixed(1)}% from last month.</strong>` });
+    else if (growth < 0) insights.push({ emoji: '📉', html: `<strong>Balance is down ${Math.abs(growth).toFixed(1)}% from last month.</strong>` });
+    else insights.push({ emoji: '➡️', html: `<strong>Balance is flat vs last month.</strong>` });
+  } else {
+    insights.push({ emoji: '💡', html: `<strong>Set your last month balance</strong> on the Current balance card to enable growth tracking.` });
+  }
+  if (income > 0) {
+    if (savingsRate >= 30) insights.push({ emoji: '🎯', html: `<strong>Excellent savings rate — ${savingsRate}%.</strong>` });
+    else if (savingsRate >= 15) insights.push({ emoji: '👍', html: `<strong>Solid savings rate of ${savingsRate}%.</strong>` });
+    else insights.push({ emoji: '⚠️', html: `<strong>Savings rate only ${savingsRate}%.</strong> Aim for 20%.` });
+  }
+  if (expenses > 0 && periodicTotal > 0) {
+    const recurringShare = Math.min(Math.round((periodicTotal / expenses) * 100), 100);
+    insights.push({ emoji: '🔁', html: `<strong>Recurring costs are ${recurringShare}% of spending</strong> (${money(periodicTotal)}/mo).` });
+  }
+  const topCat = [...state.expenses].sort((a, b) => b.amount - a.amount)[0];
+  if (topCat && expenses > 0) {
+    const topShare = Math.round((topCat.amount / expenses) * 100);
+    insights.push({ emoji: '🏠', html: `<strong>${topCat.name} is your biggest expense at ${money(topCat.amount)}</strong> — ${topShare}% of spending.` });
+  }
+  if (state.goals.length) {
+    const g = state.goals[0];
+    const pct = Math.round((g.saved / g.target) * 100);
+    const remaining = g.target - g.saved;
+    insights.push({ emoji: '🎓', html: `<strong>${g.name} is ${pct}% funded.</strong> At ${money(Math.max(net, 0))} saved per period, ~${net > 0 ? Math.ceil(remaining / net) : '∞'} periods to go.` });
+  }
+  return insights;
+}
+
+/* ============================================================
+   NAV + BOOT
+   ============================================================ */
+document.querySelectorAll('.nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-' + btn.dataset.view).classList.add('active');
+    setTimeout(animateCountUp, 80);
+  });
+});
+
+document.body.setAttribute('data-mode', state.mode || 'normal');
+document.querySelectorAll('.mode-switch button').forEach(b => b.classList.toggle('active', b.dataset.mode === (state.mode || 'normal')));
+renderAll();
+updateConnectUI();
+updateSyncIndicator();
+</script>
+</body>
+</html>
