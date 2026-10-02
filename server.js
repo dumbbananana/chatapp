@@ -115,7 +115,7 @@ app.get('/auth/status', (req, res) => {
 
 /* ---------- GMAIL ---------- */
 app.get('/api/gmail/messages', async (req, res) => {
- const { userId, q = 'from:student.services@ing.edu.np OR from:rte@ing.edu.np', maxResults = 50 } = req.query;
+  const { userId, q = 'from:student.services@ing.edu.np OR from:rte@ing.edu.np', maxResults = 50 } = req.query;
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
   const auth = getAuthenticatedClient(userId);
@@ -182,6 +182,85 @@ app.get('/api/gmail/messages', async (req, res) => {
     res.json({ messages: detailed });
   } catch (err) {
     console.error('Gmail error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ---------- GMAIL: FULL MESSAGE (for the reader modal) ---------- */
+app.get('/api/gmail/messages/:id', async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+
+  const auth = getAuthenticatedClient(userId);
+  if (!auth) {
+    return res.status(401).json({
+      error: 'Not authenticated',
+      hint: 'Click Connect Google again'
+    });
+  }
+
+  try {
+    const gmail = google.gmail({ version: 'v1', auth });
+    const full = await gmail.users.messages.get({
+      userId: 'me',
+      id: req.params.id,
+      format: 'full'
+    });
+
+    const headers = Object.fromEntries(
+      (full.data.payload?.headers || []).map(h => [h.name.toLowerCase(), h.value])
+    );
+
+    const payload = full.data.payload || {};
+
+    // Flatten the MIME tree
+    const parts = [];
+    (function walk(part) {
+      if (!part) return;
+      if (part.parts && part.parts.length) { part.parts.forEach(walk); return; }
+      parts.push(part);
+    })(payload);
+
+    const decode = (data) => Buffer.from(data || '', 'base64url').toString('utf8');
+
+    let html = '';
+    let text = '';
+    for (const p of parts) {
+      const mime = p.mimeType || '';
+      if (mime === 'text/html' && !html && p.body?.data) html = decode(p.body.data);
+      else if (mime === 'text/plain' && !text && p.body?.data) text = decode(p.body.data);
+    }
+
+    // Single-part messages have the body on the payload itself
+    if (!html && !text && payload.body?.data) {
+      const mime = payload.mimeType || '';
+      if (mime === 'text/html') html = decode(payload.body.data);
+      else text = decode(payload.body.data);
+    }
+
+    const attachments = parts
+      .filter(p => p.filename && p.filename.length)
+      .map(p => ({
+        filename: p.filename,
+        mimeType: p.mimeType || '',
+        size: p.body?.size || 0
+      }));
+
+    res.json({
+      id: full.data.id,
+      threadId: full.data.threadId,
+      from: headers.from || '',
+      to: headers.to || '',
+      cc: headers.cc || '',
+      subject: headers.subject || '(no subject)',
+      date: headers.date || '',
+      snippet: full.data.snippet || '',
+      html,
+      text,
+      attachments
+    });
+  } catch (err) {
+    console.error('Gmail message error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
