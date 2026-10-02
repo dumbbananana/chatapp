@@ -213,7 +213,6 @@ app.get('/api/gmail/messages/:id', async (req, res) => {
 
     const payload = full.data.payload || {};
 
-    // Flatten the MIME tree
     const parts = [];
     (function walk(part) {
       if (!part) return;
@@ -231,7 +230,6 @@ app.get('/api/gmail/messages/:id', async (req, res) => {
       else if (mime === 'text/plain' && !text && p.body?.data) text = decode(p.body.data);
     }
 
-    // Single-part messages have the body on the payload itself
     if (!html && !text && payload.body?.data) {
       const mime = payload.mimeType || '';
       if (mime === 'text/html') html = decode(payload.body.data);
@@ -310,7 +308,6 @@ app.get('/api/calendar/events', async (req, res) => {
 });
 
 /* ---------- SPA FALLBACK ---------- */
-// Anything not matched above serves the dashboard
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

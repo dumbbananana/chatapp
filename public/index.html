@@ -548,6 +548,60 @@
   .sankey-link:hover { fill-opacity: 0.58; }
   .sankey-node rect { transition: filter 0.2s; }
   .sankey-node:hover rect { filter: brightness(1.3); }
+
+  /* ---------- CLASS STATUS TOGGLE ---------- */
+  .class-toggle {
+    display: inline-flex; gap: 2px; padding: 2px;
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+  }
+  .class-toggle button {
+    padding: 3px 10px; border: none; background: transparent;
+    color: var(--muted); font-family: inherit;
+    font-size: 10.5px; font-weight: 700; border-radius: var(--r-pill);
+    cursor: pointer; transition: all 0.15s; letter-spacing: 0.02em;
+    line-height: 1.4;
+  }
+  .class-toggle button:hover { color: var(--text); }
+  .class-toggle button.active.attend { background: var(--sage); color: #141d10; }
+  .class-toggle button.active.skip   { background: var(--coral); color: #1a0806; }
+  .class-toggle button.active.auto   { opacity: 0.5; }
+  .class-toggle button.reset { padding: 3px 8px; font-size: 11px; }
+  .class-toggle button.reset:hover { color: var(--plum); background: var(--plum-soft); }
+
+  .class-log-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 12px;
+    align-items: center; padding: 11px 13px;
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 10px; margin-bottom: 6px; transition: all 0.2s;
+  }
+  .class-log-row:hover { border-color: var(--border-hi); }
+  .class-log-row .info { min-width: 0; }
+  .class-log-row .name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .class-log-row .meta {
+    font-size: 11px; color: var(--muted); margin-top: 3px;
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  }
+  .class-log-row .badge {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em;
+    padding: 2px 7px; border-radius: 4px; text-transform: uppercase;
+  }
+  .class-log-row .badge.auto   { background: var(--surface-3); color: var(--text-dim); }
+  .class-log-row .badge.manual { background: var(--plum-soft); color: var(--plum); }
+
+  .class-log-filter {
+    display: inline-flex; gap: 2px; padding: 3px;
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+  }
+  .class-log-filter button {
+    padding: 5px 12px; font-size: 11px; font-weight: 600;
+    border-radius: var(--r-pill); border: none; background: transparent;
+    color: var(--muted); cursor: pointer; font-family: inherit;
+    transition: all 0.15s;
+  }
+  .class-log-filter button:hover { color: var(--text); }
+  .class-log-filter button.active { background: var(--surface-3); color: var(--text); }
 </style>
 </head>
 <body data-mode="normal">
@@ -838,11 +892,27 @@ function getAllExpenses() {
    DECISION / CALC
    ============================================================ */
 function decideClass(c) {
+  const manual = state.classStatus && state.classStatus[c.id];
+  if (manual === 'attend') return { action: 'attend', reason: 'manual' };
+  if (manual === 'skip')   return { action: 'skip',   reason: 'manual' };
   const dayJobs = getJobsOnDay(c.date);
   const hasConflict = dayJobs.some(j => c.start < j.end && c.end > j.start);
   if (hasConflict) return { action: 'skip', reason: 'work' };
   return { action: 'attend', reason: 'attend' };
 }
+
+function setClassStatus(classId, status) {
+  if (!state.classStatus) state.classStatus = {};
+  if (status === 'auto') delete state.classStatus[classId];
+  else state.classStatus[classId] = status;
+  renderAll();
+}
+
+function setClassLogFilter(f) {
+  state.classLogFilter = f;
+  renderAll();
+}
+
 function attendedHours(iso) {
   return CLASSES.filter(c => c.date === iso && decideClass(c).action === 'attend').reduce((s, c) => s + (c.end - c.start), 0);
 }
@@ -888,6 +958,7 @@ function seedState() {
     mode: 'normal',
     classes: [],
     catchupStatus: {},
+    classStatus: {},
     todos: [],
     incomes: [],
     expenses: [],
@@ -907,7 +978,15 @@ let state = loadState() || seedState();
 if (state.classes && state.classes.length) CLASSES = state.classes;
 if (!state.jobs) state.jobs = [];
 if (!state.holidays) state.holidays = [];
+if (!state.classStatus) state.classStatus = {};
 ALL_DATES = computeAllDates();
+
+/* Always open the calendar on the current month when the page loads. */
+(function openCalendarOnCurrentMonth() {
+  const now = new Date();
+  state.calendarMonth = { year: now.getFullYear(), month: now.getMonth() };
+  state.selectedDay = isoFrom(now);
+})();
 
 function saveState() { state.classes = CLASSES; try { localStorage.setItem('studentOS_v16', JSON.stringify(state)); } catch(e){} }
 function loadState() { try { const r = localStorage.getItem('studentOS_v16'); return r ? JSON.parse(r) : null; } catch(e){ return null; } }
@@ -1092,18 +1171,15 @@ function confirmImport() {
   if (!parsedPreview || !parsedPreview.classes) return;
   const toAdd = parsedPreview.classes.filter(c => c._enabled !== false).map(c => { const clean = { ...c }; delete clean._enabled; return clean; });
   if (toAdd.length === 0) { closeUploadModal(); return; }
-  if (importMode === 'replace') { CLASSES.length = 0; CLASSES.push(...toAdd); }
-  else {
+  if (importMode === 'replace') {
+    CLASSES.length = 0;
+    CLASSES.push(...toAdd);
+    state.classStatus = {};
+  } else {
     const existing = new Set(CLASSES.map(c => `${c.date}|${c.start}|${c.name}`));
     toAdd.forEach(c => { const key = `${c.date}|${c.start}|${c.name}`; if (!existing.has(key)) { CLASSES.push(c); existing.add(key); } });
   }
   ALL_DATES = computeAllDates();
-  if (CLASSES.length) {
-    const first = CLASSES.map(c => c.date).sort()[0];
-    const d = parseISO(first);
-    state.calendarMonth = { year: d.getFullYear(), month: d.getMonth() };
-    state.selectedDay = first;
-  }
   saveState(); renderAll(); closeUploadModal();
 }
 
@@ -1531,7 +1607,6 @@ function sankeyChart(sources, targets, opts = {}) {
     return '<div class="empty">Add income sources and expenses to see your money flow.</div>';
   }
 
-  // Keep the diagram honest if the two sides don't add up
   const total = Math.max(totalL, totalR);
   if (totalL < totalR - 0.5) src.push({ name: 'Deficit', amount: totalR - totalL, color: '#d4745e' });
   else if (totalR < totalL - 0.5) tgt.push({ name: 'Unallocated', amount: totalL - totalR, color: '#7a7060' });
@@ -1565,7 +1640,6 @@ function sankeyChart(sources, targets, opts = {}) {
   const lOff = L.items.map(n => n.y);
   const rOff = R.items.map(n => n.y);
 
-  // ---- ribbons ----
   let links = '';
   L.items.forEach((sn, i) => {
     R.items.forEach((tn, j) => {
@@ -1586,13 +1660,11 @@ function sankeyChart(sources, targets, opts = {}) {
     });
   });
 
-  // ---- nodes ----
   const nodeRect = (n, x) =>
     `<g class="sankey-node">`
     + `<rect x="${x}" y="${n.y.toFixed(2)}" width="${nodeW}" height="${Math.max(n.h, 1).toFixed(2)}" rx="3" fill="${n.color}"/>`
     + `<title>${esc(n.name)}: ${money(n.amount)}</title></g>`;
 
-  // ---- labels ----
   const labelLeft = (n) =>
     `<text x="${xL - 12}" y="${(n.y + n.h / 2 + 4).toFixed(2)}" text-anchor="end">`
     + `<tspan class="sankey-label">${esc(truncateLabel(n.name))}</tspan>`
@@ -1673,7 +1745,8 @@ function buildSchedule() {
       skipped.push({
         id: skipId, classId: c.id, className: c.name, topic: c.topic || '', type: c.type || '',
         date: c.date, start: c.start, end: c.end, hoursMissed: c.end - c.start,
-        floor: c.floor, room: c.room, status: state.catchupStatus[skipId] || 'pending'
+        floor: c.floor, room: c.room, status: state.catchupStatus[skipId] || 'pending',
+        reason: decision.reason
       });
       rows.push({ ...c, skipped: true, skipId, decision });
     } else {
@@ -1771,8 +1844,16 @@ function getMonthGrid(year, month) {
 function getDayEvents(iso, filter) {
   const events = [];
   if (filter === 'uni' || filter === 'all') {
-    CLASSES.filter(c => c.date === iso && decideClass(c).action === 'attend').forEach(c => events.push({ type:'attend', label: c.name, time: fmtRangeShort(c.start, c.end) }));
-    CLASSES.filter(c => c.date === iso && decideClass(c).action === 'skip').forEach(c => events.push({ type:'skip', label: c.name, time: fmtRangeShort(c.start, c.end) }));
+    CLASSES.filter(c => c.date === iso).forEach(c => {
+      const d = decideClass(c);
+      events.push({
+        type: d.action === 'attend' ? 'attend' : 'skip',
+        label: c.name,
+        time: fmtRangeShort(c.start, c.end),
+        classId: c.id,
+        manual: d.reason === 'manual'
+      });
+    });
   }
   if (filter === 'all') {
     if (isHoliday(iso)) { events.push({ type:'holiday', label:'Holiday — day off', time:'All day' }); }
@@ -1835,6 +1916,21 @@ function renderCalendarBlock(filter = 'all') {
   const selEvents = getDayEvents(state.selectedDay, filter);
   const detailHtml = selEvents.length
     ? selEvents.map(e => {
+        if (e.classId) {
+          const eff = e.type === 'attend' ? 'attend' : 'skip';
+          const isManual = !!e.manual;
+          const attendCls = eff === 'attend' ? `active attend${isManual ? '' : ' auto'}` : '';
+          const skipCls   = eff === 'skip'   ? `active skip${isManual ? '' : ' auto'}`   : '';
+          return `<div class="detail-row">
+            <div class="detail-time">${esc(e.time) || '—'}</div>
+            <div><div class="detail-title">${esc(e.label)}</div></div>
+            <div class="class-toggle" title="${isManual ? 'Set manually' : 'Automatic decision'}">
+              <button class="${attendCls}" onclick="setClassStatus('${e.classId}', 'attend')" title="Mark attended">✓</button>
+              <button class="${skipCls}"   onclick="setClassStatus('${e.classId}', 'skip')"   title="Mark skipped">✗</button>
+              ${isManual ? `<button class="reset" onclick="setClassStatus('${e.classId}', 'auto')" title="Reset to automatic">↺</button>` : ''}
+            </div>
+          </div>`;
+        }
         const tagClass = { attend:'sage', skip:'coral', job:'amber', todo:'plum', email:'sky', holiday:'plum' }[e.type];
         const tagLabel = { attend:'Class', skip:'Skipped', job:'Work', todo:'Task', email:'Event', holiday:'Holiday' }[e.type];
         return `<div class="detail-row"><div class="detail-time">${esc(e.time) || '—'}</div><div><div class="detail-title">${esc(e.label)}</div></div><span class="pill ${tagClass}">${tagLabel}</span></div>`;
@@ -2112,7 +2208,6 @@ async function openEmail(id) {
   bodyEl.innerHTML = '<div class="processing"><div class="spinner"></div><div style="font-weight:600;">Opening email…</div></div>';
   overlay.classList.add('open');
 
-  // Refresh the list so the unread dot disappears immediately
   renderAll();
 
   if (!currentUserId) {
@@ -2183,7 +2278,7 @@ function closeEmailModal() {
   document.getElementById('email-modal-body').innerHTML = '';
 }
 
-function toggleEmail(id) { /* kept for compatibility — reader modal replaces it */ openEmail(id); }
+function toggleEmail(id) { openEmail(id); }
 
 /* ============================================================
    TODOS
@@ -2293,6 +2388,47 @@ function deleteTodo(id) { state.todos = state.todos.filter(t => t.id !== id); re
 /* ============================================================
    UNI VIEW
    ============================================================ */
+function renderClassLog() {
+  const filter = state.classLogFilter || 'all';
+  let classes = [...CLASSES].sort((a, b) => b.date.localeCompare(a.date) || a.start - b.start);
+
+  if (filter === 'attended')      classes = classes.filter(c => decideClass(c).action === 'attend');
+  else if (filter === 'skipped')  classes = classes.filter(c => decideClass(c).action === 'skip');
+  else if (filter === 'manual')   classes = classes.filter(c => state.classStatus && state.classStatus[c.id]);
+
+  if (!classes.length) return '<div class="empty">No classes match this filter.</div>';
+
+  return classes.slice(0, 150).map(c => {
+    const d = decideClass(c);
+    const isManual = d.reason === 'manual';
+    const eff = d.action;
+    const badge = isManual
+      ? '<span class="badge manual">Manual</span>'
+      : (d.reason === 'work'
+          ? '<span class="badge auto">Auto · work conflict</span>'
+          : '<span class="badge auto">Auto</span>');
+    return `
+      <div class="class-log-row">
+        <div class="info">
+          <div class="name">${esc(c.name)}</div>
+          <div class="meta">
+            <span>${fmtDate(c.date)} · ${dowShort(c.date)}</span>
+            <span>·</span>
+            <span>${fmtRange(c.start, c.end)}</span>
+            ${c.room ? `<span>·</span><span>${esc(c.room)}</span>` : ''}
+            ${badge}
+          </div>
+        </div>
+        <div class="class-toggle" title="${isManual ? 'Set manually' : 'Automatic decision'}">
+          <button class="${eff === 'attend' ? `active attend${isManual ? '' : ' auto'}` : ''}" onclick="setClassStatus('${c.id}', 'attend')" title="Mark attended">✓</button>
+          <button class="${eff === 'skip'   ? `active skip${isManual ? '' : ' auto'}`   : ''}" onclick="setClassStatus('${c.id}', 'skip')"   title="Mark skipped">✗</button>
+          ${isManual ? `<button class="reset" onclick="setClassStatus('${c.id}', 'auto')" title="Reset to automatic">↺</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function renderUni() {
   const totalAttend = schedule.attended.length;
   const totalSkip = schedule.skipped.length;
@@ -2333,19 +2469,24 @@ function renderUni() {
     return `<div class="heat-day ${cls}"><div class="d">${fmtDate(date)}</div><div class="n">${n}</div></div>`;
   }).join('');
 
-  const skippedLog = schedule.skipped.slice().sort((a, b) => a.date.localeCompare(b.date) || a.start - b.start).map(s => `
-    <div class="skip-item">
-      <div class="row between wrap" style="align-items: flex-start">
-        <div style="flex: 1">
-          <div class="name">${esc(s.className)}</div>
-          <div class="meta">${fmtDateLong(s.date)} · ${fmtRange(s.start, s.end)} · ${esc(s.floor || '')} ${esc(s.room || '')}</div>
+  const skippedLog = schedule.skipped.slice().sort((a, b) => a.date.localeCompare(b.date) || a.start - b.start).map(s => {
+    const reasonPill = s.reason === 'manual'
+      ? '<span class="pill plum">manual</span>'
+      : '<span class="pill amber">work conflict</span>';
+    return `
+      <div class="skip-item">
+        <div class="row between wrap" style="align-items: flex-start">
+          <div style="flex: 1">
+            <div class="name">${esc(s.className)}</div>
+            <div class="meta">${fmtDateLong(s.date)} · ${fmtRange(s.start, s.end)} · ${esc(s.floor || '')} ${esc(s.room || '')}</div>
+          </div>
+          <div style="display: flex; gap: 6px;">${reasonPill}<span class="pill coral">skip</span></div>
         </div>
-        <span class="pill coral">skip</span>
+        ${s.topic ? `<div class="topic"><strong>Missed:</strong> ${esc(s.topic)}</div>` : ''}
+        <button class="status-btn ${s.status === 'done' ? 'done' : ''}" onclick="toggleCatchup('${s.id}')">${s.status === 'done' ? '✓ Caught up' : 'Mark as caught up'}</button>
       </div>
-      ${s.topic ? `<div class="topic"><strong>Missed:</strong> ${esc(s.topic)}</div>` : ''}
-      <button class="status-btn ${s.status === 'done' ? 'done' : ''}" onclick="toggleCatchup('${s.id}')">${s.status === 'done' ? '✓ Caught up' : 'Mark as caught up'}</button>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   const attendanceSplit = [
     { name:'Attended', amount: totalAttend, color:'#86ab7a' },
@@ -2413,6 +2554,19 @@ function renderUni() {
           <div><div style="font-size: 20px; font-weight: 700;">${resolved} of ${totalSkip}</div><div style="color: var(--muted); font-size: 12px; margin-top: 4px;">sessions caught up</div></div>
         </div>
       </div>
+    </div>
+    <h2 class="section-title">Class log</h2>
+    <div class="card" style="margin-bottom: 20px">
+      <div class="row between wrap" style="margin-bottom: 14px; gap: 10px;">
+        <h2 style="margin: 0;">All classes</h2>
+        <div class="class-log-filter">
+          <button class="${(state.classLogFilter || 'all') === 'all'      ? 'active' : ''}" onclick="setClassLogFilter('all')">All</button>
+          <button class="${(state.classLogFilter || 'all') === 'attended' ? 'active' : ''}" onclick="setClassLogFilter('attended')">Attended</button>
+          <button class="${(state.classLogFilter || 'all') === 'skipped'  ? 'active' : ''}" onclick="setClassLogFilter('skipped')">Skipped</button>
+          <button class="${(state.classLogFilter || 'all') === 'manual'   ? 'active' : ''}" onclick="setClassLogFilter('manual')">Manual</button>
+        </div>
+      </div>
+      ${renderClassLog()}
     </div>
     <h2 class="section-title">Skipped log</h2>
     <div class="card">${skippedLog || '<div class="empty">No skipped sessions.</div>'}</div>
