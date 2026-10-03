@@ -21,8 +21,6 @@ app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 /* ---------- IN-MEMORY TOKEN STORE ---------- */
-// Wiped when the server sleeps — user clicks "Connect Google" again.
-// Fine for personal use.
 const tokenStore = new Map();
 
 const saveTokens = (id, t) => tokenStore.set(id, { ...t, savedAt: Date.now() });
@@ -186,7 +184,7 @@ app.get('/api/gmail/messages', async (req, res) => {
   }
 });
 
-/* ---------- GMAIL: FULL MESSAGE (for the reader modal) ---------- */
+/* ---------- GMAIL: FULL MESSAGE ---------- */
 app.get('/api/gmail/messages/:id', async (req, res) => {
   const { userId } = req.query;
   if (!userId) return res.status(400).json({ error: 'userId required' });

@@ -520,7 +520,6 @@
   body[data-mode="detailed"] .card { padding: 24px 26px; }
   body[data-mode="detailed"] .stat-card .stat { font-size: 38px; }
 
-  /* ---------- EMAIL READER ---------- */
   a.btn { text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
   .email-frame {
     width: 100%; height: 460px; display: block;
@@ -539,7 +538,6 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
-  /* ---------- SANKEY ---------- */
   .sankey { width: 100%; height: auto; display: block; overflow: visible; }
   .sankey text { pointer-events: none; }
   .sankey-label { font-size: 11.5px; font-weight: 600; fill: var(--text-dim); }
@@ -549,7 +547,6 @@
   .sankey-node rect { transition: filter 0.2s; }
   .sankey-node:hover rect { filter: brightness(1.3); }
 
-  /* ---------- CLASS STATUS TOGGLE ---------- */
   .class-toggle {
     display: inline-flex; gap: 2px; padding: 2px;
     background: var(--bg-2); border: 1px solid var(--border);
@@ -837,6 +834,12 @@ function fmtCompact(n) {
 }
 function isWeekend(iso) { const d = parseISO(iso).getDay(); return d === 0 || d === 6; }
 function daysAway(iso) { const today = new Date(); today.setHours(0,0,0,0); return Math.round((parseISO(iso) - today) / 86400000); }
+function todayIso() { return isoFrom(new Date()); }
+
+function getUpcomingDates() {
+  const t = todayIso();
+  return ALL_DATES.filter(d => d >= t);
+}
 
 /* ============================================================
    JOB HELPERS
@@ -970,6 +973,7 @@ function seedState() {
     lastMonthBalance: 0,
     calendarMonth: { year: today.getFullYear(), month: today.getMonth() },
     selectedDay: isoFrom(today),
+    pendingTaskDate: null,
     emailFilter: 'all',
     expandedEmail: null
   };
@@ -1197,12 +1201,60 @@ function openEditModal(type) {
   document.getElementById('edit-modal').classList.add('open');
   renderEditModal();
 }
-function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); editType = null; renderAll(); }
+function closeEditModal() {
+  document.getElementById('edit-modal').classList.remove('open');
+  editType = null;
+  state.pendingTaskDate = null;
+  renderAll();
+}
 
 function renderEditModal() {
   const body = document.getElementById('edit-body');
   const title = document.getElementById('edit-title');
   const subtitle = document.getElementById('edit-subtitle');
+
+  if (editType === 'newTask') {
+    const iso = state.pendingTaskDate || todayIso();
+    title.textContent = 'New task';
+    subtitle.textContent = `Scheduled for ${fmtDateLong(iso)}`;
+    body.innerHTML = `
+      <div class="edit-form-block">
+        <div class="field">
+          <label class="field-label">Task</label>
+          <input class="input" id="task-title" placeholder="e.g. Study for CS201" onkeydown="if(event.key==='Enter')createTaskForDay()" />
+        </div>
+        <div class="edit-form-grid-2">
+          <div class="field">
+            <label class="field-label">Hours needed</label>
+            <input class="input" id="task-hours" type="number" min="0.5" step="0.5" value="1" />
+          </div>
+          <div class="field">
+            <label class="field-label">Priority</label>
+            <select class="select" id="task-priority">
+              <option value="high">High</option>
+              <option value="med" selected>Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label class="field-label">Repeat</label>
+          <select class="select" id="task-recurrence">
+            <option value="once" selected>Once — just this day</option>
+            <option value="daily">Daily from this day</option>
+            <option value="every-2-days">Every 2 days from this day</option>
+            <option value="weekly">Weekly from this day</option>
+            <option value="monthly">Monthly from this day</option>
+          </select>
+        </div>
+        <div class="note" style="margin-top: -4px;">
+          <strong>Once</strong> pins the task to ${esc(fmtDate(iso))} — it appears on that day even if you're busy. Recurring options start from ${esc(fmtDate(iso))} and get auto-scheduled into your free time.
+        </div>
+        <button class="btn amber" onclick="createTaskForDay()" style="margin-top: 4px;">Add task</button>
+      </div>
+    `;
+    return;
+  }
 
   if (editType === 'incomes') {
     title.textContent = 'Income sources';
@@ -1551,6 +1603,36 @@ function removeHoliday(dateStr) {
   renderEditModal();
 }
 
+/* ---------- New-task-for-day helpers ---------- */
+function openAddTaskForDay(iso) {
+  state.pendingTaskDate = iso || todayIso();
+  editType = 'newTask';
+  document.getElementById('edit-modal').classList.add('open');
+  renderEditModal();
+}
+
+function createTaskForDay() {
+  const title = (document.getElementById('task-title')?.value || '').trim();
+  const hours = parseFloat(document.getElementById('task-hours')?.value) || 1;
+  const priority = document.getElementById('task-priority')?.value || 'med';
+  const recurrence = document.getElementById('task-recurrence')?.value || 'once';
+  const iso = state.pendingTaskDate || todayIso();
+  if (!title) return;
+
+  const isOnce = recurrence === 'once';
+  state.todos.push({
+    id: 'td' + Date.now(),
+    title, hours, priority, recurrence,
+    startDate: iso,
+    pinnedDate: isOnce ? iso : null,
+    completed: false,
+    completedDates: [],
+    scheduledOnCalendar: true
+  });
+  state.pendingTaskDate = null;
+  closeEditModal();
+}
+
 /* ============================================================
    SANKEY — money flow diagram
    ============================================================ */
@@ -1767,12 +1849,44 @@ function placeTodos() {
     const order = { high: 0, med: 1, low: 2 };
     return order[a.priority] - order[b.priority];
   });
+
+  const today = todayIso();
+
   for (const todo of sorted) {
     if (todo.recurrence === 'once' && todo.completed) continue;
     if (todo.scheduledOnCalendar === false) continue;
+
+    /* ---- Pinned task: always lands on its chosen date ---- */
+    if (todo.pinnedDate) {
+      const date = todo.pinnedDate;
+      const slots = freeSlotsOnDate(date);
+      let placed = false;
+      for (const [s, e] of slots) {
+        if (e - s >= todo.hours) {
+          instances.push({ todoId: todo.id, date, start: s, end: s + todo.hours });
+          usage[date].push([s, s + todo.hours]);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        instances.push({ todoId: todo.id, date, start: 9, end: 9 + todo.hours });
+        usage[date].push([9, 9 + todo.hours]);
+      }
+      continue;
+    }
+
+    /* ---- Regular task: schedule only on upcoming days ---- */
     let dates;
-    if (todo.recurrence === 'once') dates = [todo.startDate];
-    else dates = ALL_DATES.filter(d => todoOccursOn(todo, d) && !todo.completedDates.includes(d));
+    if (todo.recurrence === 'once') {
+      const sd = todo.startDate;
+      dates = [ (sd && sd >= today) ? sd : today ];
+    } else {
+      dates = getUpcomingDates().filter(d =>
+        todoOccursOn(todo, d) && !todo.completedDates.includes(d)
+      );
+    }
+
     for (const date of dates) {
       if (!date) continue;
       const slots = freeSlotsOnDate(date);
@@ -1960,7 +2074,10 @@ function renderCalendarBlock(filter = 'all') {
       <div class="day-detail">
         <div class="day-detail-header">
           <div class="day-detail-title">${fmtDateLong(state.selectedDay)}</div>
-          <div class="day-detail-sub">${hFmt(freeHours(state.selectedDay))} free · ${selEvents.length} event${selEvents.length !== 1 ? 's' : ''}</div>
+          <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <div class="day-detail-sub">${hFmt(freeHours(state.selectedDay))} free · ${selEvents.length} event${selEvents.length !== 1 ? 's' : ''}</div>
+            <button class="btn amber small" onclick="openAddTaskForDay('${state.selectedDay}')">+ Add task</button>
+          </div>
         </div>
         <div class="detail-list">${detailHtml}</div>
       </div>
@@ -2191,7 +2308,6 @@ function renderEmails() {
   `).join('');
 }
 
-/* ---------- EMAIL READER ---------- */
 async function openEmail(id) {
   const item = (liveEmails || []).find(e => e.id === id);
   const overlay = document.getElementById('email-modal');
@@ -2300,7 +2416,14 @@ function quickAdd() {
   const priority = document.getElementById('qa-priority').value;
   const recurrence = document.getElementById('qa-recurrence').value;
   if (!title) return;
-  state.todos.push({ id: 'td' + Date.now(), title, hours, priority, recurrence, startDate: ALL_DATES[0], completed: false, completedDates: [], scheduledOnCalendar: true });
+  state.todos.push({
+    id: 'td' + Date.now(),
+    title, hours, priority, recurrence,
+    startDate: todayIso(),
+    completed: false,
+    completedDates: [],
+    scheduledOnCalendar: true
+  });
   renderAll();
 }
 function renderTodos() {
@@ -2315,8 +2438,10 @@ function renderTodos() {
 }
 function isTodoFullyDone(todo) {
   if (todo.recurrence === 'once') return todo.completed;
-  const total = ALL_DATES.filter(d => todoOccursOn(todo, d)).length;
-  return total > 0 && todo.completedDates.length >= total;
+  const upcoming = getUpcomingDates().filter(d => todoOccursOn(todo, d));
+  if (upcoming.length === 0) return true;
+  const done = upcoming.filter(d => todo.completedDates.includes(d)).length;
+  return done >= upcoming.length;
 }
 function renderTodoItem(todo) {
   const isRecur = todo.recurrence !== 'once';
@@ -2341,9 +2466,9 @@ function renderTodoItem(todo) {
 
   let progressHtml = '';
   if (isRecur) {
-    const total = ALL_DATES.filter(d => todoOccursOn(todo, d)).length;
-    const done = todo.completedDates.length;
-    progressHtml = `<span style="font-weight:600">${done}/${total} done</span>`;
+    const upcoming = getUpcomingDates().filter(d => todoOccursOn(todo, d));
+    const done = upcoming.filter(d => todo.completedDates.includes(d)).length;
+    progressHtml = `<span style="font-weight:600">${done}/${upcoming.length} done</span>`;
   }
   const recurChip = isRecur ? `<span class="pill ${todo.priority}">${recurrenceLabel(todo.recurrence)}</span>` : '';
   return `
@@ -2359,7 +2484,7 @@ function renderTodoItem(todo) {
   `;
 }
 function getNextPendingDate(todo) {
-  for (const date of ALL_DATES) {
+  for (const date of getUpcomingDates()) {
     if (!todoOccursOn(todo, date)) continue;
     if (todo.completedDates.includes(date)) continue;
     return date;
